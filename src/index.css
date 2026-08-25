@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --color-salcie-pink: #FF2EB5;
+  --color-salcie-blue: #287BFF;
+  --color-salcie-cyan: #00C8FF;
+  --color-salcie-purple: #8B5CFF;
+  --color-salcie-night: #090B1A;
+  --color-salcie-bg: #F7F8FF;
+  --color-salcie-dark: #15172A;
+  --color-salcie-muted: #62677F;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #F7F8FF;
+  color: #15172A;
+  min-height: 100vh;
+}
+
+h1, h2, h3, .font-brand {
+  font-family: var(--font-display);
+}
+
+/* Custom interactive styles */
+.gradient-salcie-text {
+  background: linear-gradient(135deg, #FF2EB5 0%, #8B5CFF 50%, #287BFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-salcie-btn {
+  background: linear-gradient(135deg, #FF2EB5 0%, #8B5CFF 50%, #287BFF 100%);
+  color: #FFFFFF;
+}
+
+.gradient-salcie-btn:hover {
+  background: linear-gradient(135deg, #ff14ad 0%, #7b46ff 50%, #176fff 100%);
+  box-shadow: 0 4px 18px rgba(255, 46, 181, 0.28);
+}
+
+.card-hover-effect {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-hover-effect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(40, 123, 255, 0.08), 0 8px 10px -6px rgba(255, 46, 181, 0.04);
+}
+
+/* Custom focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #287BFF;
+  outline-offset: 2px;
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d8ee;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b5bde4;
+}
