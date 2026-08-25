@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar, 
@@ -12,7 +12,7 @@ import {
   Check, 
   Info, 
   Clock, 
-  Sparkles,
+  Sparkles, 
   FileCheck,
   AlertCircle,
   Upload,
@@ -37,6 +37,24 @@ interface DateOptionItem {
   time: string;
   text: string;
 }
+
+const MONTHS_SPANISH = [
+  { value: '01', label: 'Enero' },
+  { value: '02', label: 'Febrero' },
+  { value: '03', label: 'Marzo' },
+  { value: '04', label: 'Abril' },
+  { value: '05', label: 'Mayo' },
+  { value: '06', label: 'Junio' },
+  { value: '07', label: 'Julio' },
+  { value: '08', label: 'Agosto' },
+  { value: '09', label: 'Septiembre' },
+  { value: '10', label: 'Octubre' },
+  { value: '11', label: 'Noviembre' },
+  { value: '12', label: 'Diciembre' },
+];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR + i);
 
 // Utility to format date into readable Spanish text
 function formatSpanishDateOnly(dateStr: string): string {
@@ -207,15 +225,51 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   const todayDateStr = new Date().toISOString().split('T')[0];
   const [dateMode, setDateMode] = useState<'fixed' | 'poll'>('poll');
   const [fixedDate, setFixedDate] = useState('');
+  const [fixedDay, setFixedDay] = useState('');
+  const [fixedMonth, setFixedMonth] = useState('');
+  const [fixedYear, setFixedYear] = useState('');
   const [fixedTime, setFixedTime] = useState('13:00');
   const [isFixedDateConfirmed, setIsFixedDateConfirmed] = useState(false);
   const [fixedDateError, setFixedDateError] = useState('');
   
+  // Compute valid days in selected month
+  const daysInSelectedMonth = useMemo(() => {
+    if (!fixedMonth || !fixedYear) return 31;
+    const monthNum = parseInt(fixedMonth, 10);
+    const yearNum = parseInt(fixedYear, 10);
+    return new Date(yearNum, monthNum, 0).getDate();
+  }, [fixedMonth, fixedYear]);
+
+  const dayOptions = useMemo(() => {
+    return Array.from({ length: daysInSelectedMonth }, (_, i) => {
+      const d = i + 1;
+      return d < 10 ? `0${d}` : `${d}`;
+    });
+  }, [daysInSelectedMonth]);
+  
   // Alternatives for voting (empty by default so the organizer creates new proposals)
   const [dateOptions, setDateOptions] = useState<DateOptionItem[]>([]);
+  const [newOptionDay, setNewOptionDay] = useState('');
+  const [newOptionMonth, setNewOptionMonth] = useState('');
+  const [newOptionYear, setNewOptionYear] = useState('');
   const [newOptionDate, setNewOptionDate] = useState('');
   const [newOptionTime, setNewOptionTime] = useState('13:00');
   const [optionError, setOptionError] = useState('');
+
+  // Compute valid days in selected month for poll alternatives
+  const daysInSelectedMonthForPoll = useMemo(() => {
+    if (!newOptionMonth || !newOptionYear) return 31;
+    const monthNum = parseInt(newOptionMonth, 10);
+    const yearNum = parseInt(newOptionYear, 10);
+    return new Date(yearNum, monthNum, 0).getDate();
+  }, [newOptionMonth, newOptionYear]);
+
+  const dayOptionsForPoll = useMemo(() => {
+    return Array.from({ length: daysInSelectedMonthForPoll }, (_, i) => {
+      const d = i + 1;
+      return d < 10 ? `0${d}` : `${d}`;
+    });
+  }, [daysInSelectedMonthForPoll]);
 
   // Step 3: Location
   const [locationMode, setLocationMode] = useState<'fixed' | 'poll'>('poll');
@@ -285,12 +339,26 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   };
 
   // Fixed Date & Time Handlers
-  const handleFixedDateChange = (val: string) => {
-    setFixedDate(val);
+  const updateFixedDateFromParts = (d: string, m: string, y: string) => {
     setIsFixedDateConfirmed(false);
-    if (val && val < todayDateStr) {
-      setFixedDateError('Elegí una fecha de hoy en adelante.');
+    if (d && m && y) {
+      const monthNum = parseInt(m, 10);
+      const yearNum = parseInt(y, 10);
+      const maxDays = new Date(yearNum, monthNum, 0).getDate();
+      let validDay = d;
+      if (parseInt(d, 10) > maxDays) {
+        validDay = maxDays < 10 ? `0${maxDays}` : `${maxDays}`;
+        setFixedDay(validDay);
+      }
+      const fullDateStr = `${y}-${m.padStart(2, '0')}-${validDay.padStart(2, '0')}`;
+      setFixedDate(fullDateStr);
+      if (fullDateStr < todayDateStr) {
+        setFixedDateError('Elegí una fecha de hoy en adelante.');
+      } else {
+        setFixedDateError('');
+      }
     } else {
+      setFixedDate('');
       setFixedDateError('');
     }
     setErrors((prev) => {
@@ -298,6 +366,61 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
       delete copy.date;
       return copy;
     });
+  };
+
+  const handleFixedDaySelect = (val: string) => {
+    setFixedDay(val);
+    updateFixedDateFromParts(val, fixedMonth, fixedYear);
+  };
+
+  const handleFixedMonthSelect = (val: string) => {
+    setFixedMonth(val);
+    updateFixedDateFromParts(fixedDay, val, fixedYear);
+  };
+
+  const handleFixedYearSelect = (val: string) => {
+    setFixedYear(val);
+    updateFixedDateFromParts(fixedDay, fixedMonth, val);
+  };
+
+  // Poll Alternative Date Handlers
+  const updateNewOptionDateFromParts = (d: string, m: string, y: string) => {
+    setOptionError('');
+    if (d && m && y) {
+      const monthNum = parseInt(m, 10);
+      const yearNum = parseInt(y, 10);
+      const maxDays = new Date(yearNum, monthNum, 0).getDate();
+      let validDay = d;
+      if (parseInt(d, 10) > maxDays) {
+        validDay = maxDays < 10 ? `0${maxDays}` : `${maxDays}`;
+        setNewOptionDay(validDay);
+      }
+      const fullDateStr = `${y}-${m.padStart(2, '0')}-${validDay.padStart(2, '0')}`;
+      setNewOptionDate(fullDateStr);
+      if (fullDateStr < todayDateStr) {
+        setOptionError('Elegí una fecha de hoy en adelante.');
+      } else {
+        setOptionError('');
+      }
+    } else {
+      setNewOptionDate('');
+      setOptionError('');
+    }
+  };
+
+  const handlePollDaySelect = (val: string) => {
+    setNewOptionDay(val);
+    updateNewOptionDateFromParts(val, newOptionMonth, newOptionYear);
+  };
+
+  const handlePollMonthSelect = (val: string) => {
+    setNewOptionMonth(val);
+    updateNewOptionDateFromParts(newOptionDay, val, newOptionYear);
+  };
+
+  const handlePollYearSelect = (val: string) => {
+    setNewOptionYear(val);
+    updateNewOptionDateFromParts(newOptionDay, newOptionMonth, val);
   };
 
   const handleFixedTimeChange = (val: string) => {
@@ -311,8 +434,8 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   };
 
   const handleConfirmFixedDateTime = () => {
-    if (!fixedDate) {
-      setFixedDateError('Por favor selecciona una fecha.');
+    if (!fixedDay || !fixedMonth || !fixedYear || !fixedDate) {
+      setFixedDateError('Por favor selecciona día, mes y año.');
       return;
     }
     if (!fixedTime) {
@@ -339,6 +462,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   };
 
   const isConfirmButtonDisabled = !fixedDate || !fixedTime || fixedDate < todayDateStr;
+  const isAddOptionDisabled = !newOptionDay || !newOptionMonth || !newOptionYear || !newOptionDate || !newOptionTime || newOptionDate < todayDateStr;
 
   const validateStep = (step: number): boolean => {
     const newErrors: { [key: string]: string } = {};
@@ -356,7 +480,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
         }
       }
       if (dateMode === 'poll' && dateOptions.length < 2) {
-        newErrors.date = 'Debes agregar al menos dos opciones para la votación familiar.';
+        newErrors.date = 'Agregá al menos dos opciones para continuar.';
       }
     } else if (step === 3) {
       if (locationMode === 'fixed' && !fixedLocationName.trim()) {
@@ -387,8 +511,8 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
   // Date option helpers
   const handleAddDateOption = () => {
-    if (!newOptionDate) {
-      setOptionError('Selecciona una fecha para la opción.');
+    if (!newOptionDay || !newOptionMonth || !newOptionYear || !newOptionDate) {
+      setOptionError('Selecciona día, mes y año para la opción.');
       return;
     }
     if (!newOptionTime) {
@@ -397,6 +521,14 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     }
     if (newOptionDate < todayDateStr) {
       setOptionError('Elegí una fecha de hoy en adelante.');
+      return;
+    }
+
+    const isDuplicate = dateOptions.some(
+      (opt) => opt.date === newOptionDate && opt.time === newOptionTime
+    );
+    if (isDuplicate) {
+      setOptionError('Esta opción ya fue agregada.');
       return;
     }
 
@@ -409,7 +541,11 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     };
 
     setDateOptions([...dateOptions, newItem]);
+    setNewOptionDay('');
+    setNewOptionMonth('');
+    setNewOptionYear('');
     setNewOptionDate('');
+    setNewOptionTime('13:00');
     setOptionError('');
     setErrors((prev) => {
       const copy = { ...prev };
@@ -908,21 +1044,65 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                     <span className="text-xs font-bold text-[#15172A]">Ingresar fecha y hora exacta</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     <div>
-                      <label htmlFor="fixed-date-picker" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      <label className="block text-xs font-bold text-[#15172A] mb-1.5">
                         Selector de fecha <span className="text-[#FF2EB5]">*</span>
                       </label>
-                      <div className="relative">
-                        <input
-                          id="fixed-date-picker"
-                          type="date"
-                          min={todayDateStr}
-                          value={fixedDate}
-                          onChange={(e) => handleFixedDateChange(e.target.value)}
-                          required
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
-                        />
+                      <div className="grid grid-cols-3 gap-2">
+                        {/* Selector de Día */}
+                        <div>
+                          <select
+                            id="fixed-day-select"
+                            value={fixedDay}
+                            onChange={(e) => handleFixedDaySelect(e.target.value)}
+                            required
+                            className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Día</option>
+                            {dayOptions.map((d) => (
+                              <option key={d} value={d}>
+                                {parseInt(d, 10)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selector de Mes */}
+                        <div>
+                          <select
+                            id="fixed-month-select"
+                            value={fixedMonth}
+                            onChange={(e) => handleFixedMonthSelect(e.target.value)}
+                            required
+                            className="w-full px-2 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Mes</option>
+                            {MONTHS_SPANISH.map((m) => (
+                              <option key={m.value} value={m.value}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selector de Año */}
+                        <div>
+                          <select
+                            id="fixed-year-select"
+                            value={fixedYear}
+                            onChange={(e) => handleFixedYearSelect(e.target.value)}
+                            required
+                            className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Año</option>
+                            {YEAR_OPTIONS.map((y) => (
+                              <option key={y} value={y.toString()}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -1023,10 +1203,25 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                   ))}
 
                   {dateOptions.length === 0 && (
-                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center">
-                      <p className="text-xs text-amber-800 font-medium">
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-1">
+                      <p className="text-xs text-amber-800 font-bold">
                         Todavía no agregaste ninguna opción.
                       </p>
+                      <p className="text-[11px] text-amber-700 font-medium">
+                        Agregá al menos dos opciones para continuar.
+                      </p>
+                    </div>
+                  )}
+
+                  {dateOptions.length === 1 && (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-xs text-amber-800">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        Agregá al menos dos opciones para continuar.
+                      </span>
+                      <span className="font-bold text-[11px] bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded-full">
+                        1 de 2 mín.
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1038,22 +1233,63 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                     <span className="text-xs font-bold text-[#15172A]">Agregar nueva alternativa</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-3">
                     <div>
-                      <label htmlFor="new-poll-date-picker" className="block text-[11px] font-bold text-[#62677F] mb-1">
+                      <label className="block text-[11px] font-bold text-[#62677F] mb-1">
                         Fecha <span className="text-[#FF2EB5]">*</span>
                       </label>
-                      <input
-                        id="new-poll-date-picker"
-                        type="date"
-                        min={todayDateStr}
-                        value={newOptionDate}
-                        onChange={(e) => {
-                          setNewOptionDate(e.target.value);
-                          setOptionError('');
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF]"
-                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        {/* Selector de Día */}
+                        <div>
+                          <select
+                            id="poll-day-select"
+                            value={newOptionDay}
+                            onChange={(e) => handlePollDaySelect(e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Día</option>
+                            {dayOptionsForPoll.map((d) => (
+                              <option key={d} value={d}>
+                                {parseInt(d, 10)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selector de Mes */}
+                        <div>
+                          <select
+                            id="poll-month-select"
+                            value={newOptionMonth}
+                            onChange={(e) => handlePollMonthSelect(e.target.value)}
+                            className="w-full px-2 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Mes</option>
+                            {MONTHS_SPANISH.map((m) => (
+                              <option key={m.value} value={m.value}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selector de Año */}
+                        <div>
+                          <select
+                            id="poll-year-select"
+                            value={newOptionYear}
+                            onChange={(e) => handlePollYearSelect(e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                          >
+                            <option value="">Año</option>
+                            {YEAR_OPTIONS.map((y) => (
+                              <option key={y} value={y.toString()}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     </div>
 
                     <div>
@@ -1094,7 +1330,12 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                     type="button"
                     id="add-date-option-btn"
                     onClick={handleAddDateOption}
-                    className="w-full py-2.5 rounded-xl bg-[#287BFF] hover:bg-[#1a6beb] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                    disabled={isAddOptionDisabled}
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                      isAddOptionDisabled
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-200'
+                        : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer hover:scale-[1.01] active:scale-[0.99]'
+                    }`}
                   >
                     <Plus className="w-4 h-4" />
                     <span>Agregar opción a la votación</span>
@@ -1538,9 +1779,13 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
               id="wizard-next-step-btn"
               type="button"
               onClick={handleNextStep}
-              disabled={currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed}
+              disabled={
+                (currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed) ||
+                (currentStep === 2 && dateMode === 'poll' && dateOptions.length < 2)
+              }
               className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors shadow-sm ${
-                currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed
+                (currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed) ||
+                (currentStep === 2 && dateMode === 'poll' && dateOptions.length < 2)
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-200'
                   : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer'
               }`}
