@@ -179,13 +179,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               {/* Status Badge */}
               <div className="absolute bottom-4 left-4 lg:hidden">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  featuredMeeting.status === 'votacion'
+                  featuredMeeting.status === 'esperando_sugerencias'
+                    ? 'bg-[#8B5CFF] text-white'
+                    : featuredMeeting.status === 'votacion'
                     ? 'bg-[#8B5CFF] text-white'
                     : featuredMeeting.status === 'confirmado'
                     ? 'bg-emerald-500 text-white'
                     : 'bg-amber-500 text-white'
                 }`}>
-                  {featuredMeeting.status === 'votacion' ? 'En votación' : featuredMeeting.status === 'confirmado' ? 'Confirmado' : 'Propuesta'}
+                  {featuredMeeting.status === 'esperando_sugerencias'
+                    ? 'Esperando sugerencias'
+                    : featuredMeeting.status === 'votacion'
+                    ? 'En votación'
+                    : featuredMeeting.status === 'confirmado'
+                    ? 'Confirmado'
+                    : 'Propuesta'}
                 </span>
               </div>
             </div>
@@ -195,13 +203,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <div>
                 <div className="hidden lg:flex items-center justify-between mb-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    featuredMeeting.status === 'votacion'
+                    featuredMeeting.status === 'esperando_sugerencias'
+                      ? 'bg-[#8B5CFF]/15 text-[#8B5CFF]'
+                      : featuredMeeting.status === 'votacion'
                       ? 'bg-[#8B5CFF]/15 text-[#8B5CFF]'
                       : featuredMeeting.status === 'confirmado'
                       ? 'bg-emerald-50 text-emerald-700'
                       : 'bg-amber-50 text-amber-700'
                   }`}>
-                    {featuredMeeting.status === 'votacion' ? '🗳️ En votación activa' : featuredMeeting.status === 'confirmado' ? '✅ Encuentro confirmado' : '💡 Propuesta abierta'}
+                    {featuredMeeting.status === 'esperando_sugerencias'
+                      ? '🕒 Esperando sugerencias de fecha'
+                      : featuredMeeting.status === 'votacion'
+                      ? '🗳️ En votación activa'
+                      : featuredMeeting.status === 'confirmado'
+                      ? '✅ Encuentro confirmado'
+                      : '💡 Propuesta abierta'}
                   </span>
                 </div>
 

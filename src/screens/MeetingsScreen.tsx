@@ -184,7 +184,9 @@ export const MeetingsScreen: React.FC<MeetingsScreenProps> = ({
                     {/* Status Badge */}
                     <div className="absolute top-3 right-3">
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                        meet.status === 'votacion'
+                        meet.status === 'esperando_sugerencias'
+                          ? 'bg-[#8B5CFF] text-white'
+                          : meet.status === 'votacion'
                           ? 'bg-[#8B5CFF] text-white'
                           : meet.status === 'confirmado'
                           ? 'bg-emerald-500 text-white'
@@ -192,7 +194,15 @@ export const MeetingsScreen: React.FC<MeetingsScreenProps> = ({
                           ? 'bg-[#287BFF] text-white'
                           : 'bg-amber-500 text-white'
                       }`}>
-                        {meet.status === 'votacion' ? 'Votación' : meet.status === 'confirmado' ? 'Confirmado' : meet.status === 'finalizado' ? 'Finalizado' : 'Propuesta'}
+                        {meet.status === 'esperando_sugerencias'
+                          ? 'Esperando sugerencias'
+                          : meet.status === 'votacion'
+                          ? 'Votación'
+                          : meet.status === 'confirmado'
+                          ? 'Confirmado'
+                          : meet.status === 'finalizado'
+                          ? 'Finalizado'
+                          : 'Propuesta'}
                       </span>
                     </div>
 

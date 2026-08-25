@@ -19,9 +19,11 @@ import {
   Image as ImageIcon,
   RotateCcw,
   X,
-  Edit3
+  Edit3,
+  Vote,
+  ExternalLink
 } from 'lucide-react';
-import { Family, Meeting, MeetingType, PollOption, MeetingTask } from '../types';
+import { Family, Meeting, MeetingType, PollOption, MeetingTask, MeetingStatus } from '../types';
 import { SAMPLE_MEMORY_PHOTOS } from '../data/mockData';
 import { useToast } from '../components/ToastContext';
 
@@ -29,13 +31,6 @@ interface CreateMeetingScreenProps {
   activeFamily: Family;
   onCancel: () => void;
   onCreate: (meeting: Meeting) => void;
-}
-
-interface DateOptionItem {
-  id: string;
-  date: string;
-  time: string;
-  text: string;
 }
 
 const MONTHS_SPANISH = [
@@ -221,65 +216,52 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   const [imageError, setImageError] = useState('');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
 
-  // Step 2: Date & Time (Real date & time pickers, Spanish formatting)
+  // Step 2: Date & Time (Spanish formatting, collaborative mode)
   const todayDateStr = new Date().toISOString().split('T')[0];
-  const [dateMode, setDateMode] = useState<'fixed' | 'poll'>('poll');
-  const [fixedDate, setFixedDate] = useState('');
-  const [fixedDay, setFixedDay] = useState('');
-  const [fixedMonth, setFixedMonth] = useState('');
-  const [fixedYear, setFixedYear] = useState('');
-  const [fixedTime, setFixedTime] = useState('13:00');
-  const [isFixedDateConfirmed, setIsFixedDateConfirmed] = useState(false);
-  const [fixedDateError, setFixedDateError] = useState('');
   
-  // Compute valid days in selected month
-  const daysInSelectedMonth = useMemo(() => {
-    if (!fixedMonth || !fixedYear) return 31;
-    const monthNum = parseInt(fixedMonth, 10);
-    const yearNum = parseInt(fixedYear, 10);
-    return new Date(yearNum, monthNum, 0).getDate();
-  }, [fixedMonth, fixedYear]);
+  // Initial date suggestion by organizer in collaborative mode (optional)
+  const [initialSuggestion, setInitialSuggestion] = useState<{
+    day: string;
+    month: string;
+    year: string;
+    date: string;
+    time: string;
+    text: string;
+  } | null>(null);
+  const [sugDay, setSugDay] = useState('');
+  const [sugMonth, setSugMonth] = useState('');
+  const [sugYear, setSugYear] = useState(CURRENT_YEAR.toString());
+  const [sugDate, setSugDate] = useState('');
+  const [sugTime, setSugTime] = useState('13:00');
+  const [sugError, setSugError] = useState('');
 
-  const dayOptions = useMemo(() => {
-    return Array.from({ length: daysInSelectedMonth }, (_, i) => {
+  // Compute valid days in selected month for initial suggestion
+  const daysInSelectedMonthForSug = useMemo(() => {
+    if (!sugMonth || !sugYear) return 31;
+    const monthNum = parseInt(sugMonth, 10);
+    const yearNum = parseInt(sugYear, 10);
+    return new Date(yearNum, monthNum, 0).getDate();
+  }, [sugMonth, sugYear]);
+
+  const dayOptionsForSug = useMemo(() => {
+    return Array.from({ length: daysInSelectedMonthForSug }, (_, i) => {
       const d = i + 1;
       return d < 10 ? `0${d}` : `${d}`;
     });
-  }, [daysInSelectedMonth]);
-  
-  // Alternatives for voting (empty by default so the organizer creates new proposals)
-  const [dateOptions, setDateOptions] = useState<DateOptionItem[]>([]);
-  const [newOptionDay, setNewOptionDay] = useState('');
-  const [newOptionMonth, setNewOptionMonth] = useState('');
-  const [newOptionYear, setNewOptionYear] = useState('');
-  const [newOptionDate, setNewOptionDate] = useState('');
-  const [newOptionTime, setNewOptionTime] = useState('13:00');
-  const [optionError, setOptionError] = useState('');
+  }, [daysInSelectedMonthForSug]);
 
-  // Compute valid days in selected month for poll alternatives
-  const daysInSelectedMonthForPoll = useMemo(() => {
-    if (!newOptionMonth || !newOptionYear) return 31;
-    const monthNum = parseInt(newOptionMonth, 10);
-    const yearNum = parseInt(newOptionYear, 10);
-    return new Date(yearNum, monthNum, 0).getDate();
-  }, [newOptionMonth, newOptionYear]);
-
-  const dayOptionsForPoll = useMemo(() => {
-    return Array.from({ length: daysInSelectedMonthForPoll }, (_, i) => {
-      const d = i + 1;
-      return d < 10 ? `0${d}` : `${d}`;
-    });
-  }, [daysInSelectedMonthForPoll]);
-
-  // Step 3: Location
-  const [locationMode, setLocationMode] = useState<'fixed' | 'poll'>('poll');
-  const [fixedLocationName, setFixedLocationName] = useState('');
-  const [fixedLocationAddress, setFixedLocationAddress] = useState('');
-  const [locationOptions, setLocationOptions] = useState<string[]>([
-    'Casa familiar',
-    'Club o Quinta al aire libre'
-  ]);
-  const [newLocationOptionText, setNewLocationOptionText] = useState('');
+  // Step 3: Location (collaborative mode)
+  const [initialLocationSuggestion, setInitialLocationSuggestion] = useState<{
+    name: string;
+    address?: string;
+    note?: string;
+    mapsUrl?: string;
+  } | null>(null);
+  const [sugLocName, setSugLocName] = useState('');
+  const [sugLocAddress, setSugLocAddress] = useState('');
+  const [sugLocNote, setSugLocNote] = useState('');
+  const [sugLocMapsUrl, setSugLocMapsUrl] = useState('');
+  const [sugLocError, setSugLocError] = useState('');
 
   // Identify Mai (organizer) vs other family members
   const organizer = activeFamily.members.find(
@@ -338,9 +320,9 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     }
   };
 
-  // Fixed Date & Time Handlers
-  const updateFixedDateFromParts = (d: string, m: string, y: string) => {
-    setIsFixedDateConfirmed(false);
+  // Initial Date Suggestion Handlers
+  const updateSugDateFromParts = (d: string, m: string, y: string) => {
+    setSugError('');
     if (d && m && y) {
       const monthNum = parseInt(m, 10);
       const yearNum = parseInt(y, 10);
@@ -348,147 +330,142 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
       let validDay = d;
       if (parseInt(d, 10) > maxDays) {
         validDay = maxDays < 10 ? `0${maxDays}` : `${maxDays}`;
-        setFixedDay(validDay);
+        setSugDay(validDay);
       }
       const fullDateStr = `${y}-${m.padStart(2, '0')}-${validDay.padStart(2, '0')}`;
-      setFixedDate(fullDateStr);
+      setSugDate(fullDateStr);
       if (fullDateStr < todayDateStr) {
-        setFixedDateError('Elegí una fecha de hoy en adelante.');
+        setSugError('Elegí una fecha de hoy en adelante.');
       } else {
-        setFixedDateError('');
+        setSugError('');
       }
     } else {
-      setFixedDate('');
-      setFixedDateError('');
-    }
-    setErrors((prev) => {
-      const copy = { ...prev };
-      delete copy.date;
-      return copy;
-    });
-  };
-
-  const handleFixedDaySelect = (val: string) => {
-    setFixedDay(val);
-    updateFixedDateFromParts(val, fixedMonth, fixedYear);
-  };
-
-  const handleFixedMonthSelect = (val: string) => {
-    setFixedMonth(val);
-    updateFixedDateFromParts(fixedDay, val, fixedYear);
-  };
-
-  const handleFixedYearSelect = (val: string) => {
-    setFixedYear(val);
-    updateFixedDateFromParts(fixedDay, fixedMonth, val);
-  };
-
-  // Poll Alternative Date Handlers
-  const updateNewOptionDateFromParts = (d: string, m: string, y: string) => {
-    setOptionError('');
-    if (d && m && y) {
-      const monthNum = parseInt(m, 10);
-      const yearNum = parseInt(y, 10);
-      const maxDays = new Date(yearNum, monthNum, 0).getDate();
-      let validDay = d;
-      if (parseInt(d, 10) > maxDays) {
-        validDay = maxDays < 10 ? `0${maxDays}` : `${maxDays}`;
-        setNewOptionDay(validDay);
-      }
-      const fullDateStr = `${y}-${m.padStart(2, '0')}-${validDay.padStart(2, '0')}`;
-      setNewOptionDate(fullDateStr);
-      if (fullDateStr < todayDateStr) {
-        setOptionError('Elegí una fecha de hoy en adelante.');
-      } else {
-        setOptionError('');
-      }
-    } else {
-      setNewOptionDate('');
-      setOptionError('');
+      setSugDate('');
+      setSugError('');
     }
   };
 
-  const handlePollDaySelect = (val: string) => {
-    setNewOptionDay(val);
-    updateNewOptionDateFromParts(val, newOptionMonth, newOptionYear);
+  const handleSugDaySelect = (val: string) => {
+    setSugDay(val);
+    updateSugDateFromParts(val, sugMonth, sugYear);
   };
 
-  const handlePollMonthSelect = (val: string) => {
-    setNewOptionMonth(val);
-    updateNewOptionDateFromParts(newOptionDay, val, newOptionYear);
+  const handleSugMonthSelect = (val: string) => {
+    setSugMonth(val);
+    updateSugDateFromParts(sugDay, val, sugYear);
   };
 
-  const handlePollYearSelect = (val: string) => {
-    setNewOptionYear(val);
-    updateNewOptionDateFromParts(newOptionDay, newOptionMonth, val);
+  const handleSugYearSelect = (val: string) => {
+    setSugYear(val);
+    updateSugDateFromParts(sugDay, sugMonth, val);
   };
 
-  const handleFixedTimeChange = (val: string) => {
-    setFixedTime(val);
-    setIsFixedDateConfirmed(false);
-    setErrors((prev) => {
-      const copy = { ...prev };
-      delete copy.date;
-      return copy;
-    });
+  const handleSugTimeChange = (val: string) => {
+    setSugTime(val);
+    setSugError('');
   };
 
-  const handleConfirmFixedDateTime = () => {
-    if (!fixedDay || !fixedMonth || !fixedYear || !fixedDate) {
-      setFixedDateError('Por favor selecciona día, mes y año.');
+  const handleAddInitialSuggestion = () => {
+    setSugError('');
+    if (!sugDay || !sugMonth || !sugYear || !sugDate) {
+      setSugError('Por favor selecciona día, mes y año.');
       return;
     }
-    if (!fixedTime) {
-      setFixedDateError('Por favor selecciona un horario.');
+    if (!sugTime) {
+      setSugError('Por favor selecciona un horario.');
       return;
     }
-    if (fixedDate < todayDateStr) {
-      setFixedDateError('Elegí una fecha de hoy en adelante.');
+    if (sugDate < todayDateStr) {
+      setSugError('Elegí una fecha de hoy en adelante.');
       return;
     }
 
-    setFixedDateError('');
-    setIsFixedDateConfirmed(true);
-    setErrors((prev) => {
-      const copy = { ...prev };
-      delete copy.date;
-      return copy;
+    const formatted = formatSpanishDateTime(sugDate, sugTime);
+    setInitialSuggestion({
+      day: sugDay,
+      month: sugMonth,
+      year: sugYear,
+      date: sugDate,
+      time: sugTime,
+      text: formatted,
     });
-    showToast('¡Fecha y horario confirmados!');
+    setSugError('');
+    showToast('¡Tu sugerencia fue agregada con éxito!');
   };
 
-  const handleEditFixedDateTime = () => {
-    setIsFixedDateConfirmed(false);
+  const handleEditInitialSuggestion = () => {
+    if (initialSuggestion) {
+      setSugDay(initialSuggestion.day);
+      setSugMonth(initialSuggestion.month);
+      setSugYear(initialSuggestion.year);
+      setSugDate(initialSuggestion.date);
+      setSugTime(initialSuggestion.time);
+      setInitialSuggestion(null);
+      setSugError('');
+    }
   };
 
-  const isConfirmButtonDisabled = !fixedDate || !fixedTime || fixedDate < todayDateStr;
-  const isAddOptionDisabled = !newOptionDay || !newOptionMonth || !newOptionYear || !newOptionDate || !newOptionTime || newOptionDate < todayDateStr;
+  const handleRemoveInitialSuggestion = () => {
+    setInitialSuggestion(null);
+    setSugDay('');
+    setSugMonth('');
+    setSugYear(CURRENT_YEAR.toString());
+    setSugDate('');
+    setSugTime('13:00');
+    setSugError('');
+    showToast('Sugerencia eliminada.');
+  };
+
+  const isAddSugDisabled = !sugDay || !sugMonth || !sugYear || !sugDate || !sugTime || sugDate < todayDateStr;
+
+  // Initial Location Suggestion Handlers
+  const handleAddInitialLocationSuggestion = () => {
+    setSugLocError('');
+    if (!sugLocName.trim()) {
+      setSugLocError('Por favor ingresa el nombre del lugar.');
+      return;
+    }
+
+    setInitialLocationSuggestion({
+      name: sugLocName.trim(),
+      address: sugLocAddress.trim() || undefined,
+      note: sugLocNote.trim() || undefined,
+      mapsUrl: sugLocMapsUrl.trim() || undefined,
+    });
+    setSugLocName('');
+    setSugLocAddress('');
+    setSugLocNote('');
+    setSugLocMapsUrl('');
+    setSugLocError('');
+    showToast('¡Tu sugerencia de lugar fue agregada con éxito!');
+  };
+
+  const handleEditInitialLocationSuggestion = () => {
+    if (initialLocationSuggestion) {
+      setSugLocName(initialLocationSuggestion.name);
+      setSugLocAddress(initialLocationSuggestion.address || '');
+      setSugLocNote(initialLocationSuggestion.note || '');
+      setSugLocMapsUrl(initialLocationSuggestion.mapsUrl || '');
+      setInitialLocationSuggestion(null);
+      setSugLocError('');
+    }
+  };
+
+  const handleRemoveInitialLocationSuggestion = () => {
+    setInitialLocationSuggestion(null);
+    setSugLocName('');
+    setSugLocAddress('');
+    setSugLocNote('');
+    setSugLocMapsUrl('');
+    setSugLocError('');
+    showToast('Sugerencia de lugar eliminada.');
+  };
 
   const validateStep = (step: number): boolean => {
     const newErrors: { [key: string]: string } = {};
 
     if (step === 1) {
       if (!title.trim()) newErrors.title = 'Ingresa el nombre del encuentro.';
-    } else if (step === 2) {
-      if (dateMode === 'fixed') {
-        if (!isFixedDateConfirmed) {
-          newErrors.date = 'Debes presionar "Confirmar fecha y horario" para continuar.';
-        } else if (!fixedDate || !fixedTime) {
-          newErrors.date = 'Debes seleccionar tanto la fecha como la hora confirmada.';
-        } else if (fixedDate < todayDateStr) {
-          newErrors.date = 'Elegí una fecha de hoy en adelante.';
-        }
-      }
-      if (dateMode === 'poll' && dateOptions.length < 2) {
-        newErrors.date = 'Agregá al menos dos opciones para continuar.';
-      }
-    } else if (step === 3) {
-      if (locationMode === 'fixed' && !fixedLocationName.trim()) {
-        newErrors.location = 'Especifica el lugar confirmado.';
-      }
-      if (locationMode === 'poll' && locationOptions.length < 2) {
-        newErrors.location = 'Agrega al menos 2 opciones de lugar para votar.';
-      }
     } else if (step === 4) {
       if (selectedMemberIds.length === 0) {
         newErrors.guests = 'Selecciona al menos un invitado.';
@@ -507,67 +484,6 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
   const handlePrevStep = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
-  };
-
-  // Date option helpers
-  const handleAddDateOption = () => {
-    if (!newOptionDay || !newOptionMonth || !newOptionYear || !newOptionDate) {
-      setOptionError('Selecciona día, mes y año para la opción.');
-      return;
-    }
-    if (!newOptionTime) {
-      setOptionError('Selecciona un horario para la opción.');
-      return;
-    }
-    if (newOptionDate < todayDateStr) {
-      setOptionError('Elegí una fecha de hoy en adelante.');
-      return;
-    }
-
-    const isDuplicate = dateOptions.some(
-      (opt) => opt.date === newOptionDate && opt.time === newOptionTime
-    );
-    if (isDuplicate) {
-      setOptionError('Esta opción ya fue agregada.');
-      return;
-    }
-
-    const formatted = formatSpanishDateTime(newOptionDate, newOptionTime);
-    const newItem: DateOptionItem = {
-      id: `dto-opt-${Date.now()}`,
-      date: newOptionDate,
-      time: newOptionTime,
-      text: formatted,
-    };
-
-    setDateOptions([...dateOptions, newItem]);
-    setNewOptionDay('');
-    setNewOptionMonth('');
-    setNewOptionYear('');
-    setNewOptionDate('');
-    setNewOptionTime('13:00');
-    setOptionError('');
-    setErrors((prev) => {
-      const copy = { ...prev };
-      delete copy.date;
-      return copy;
-    });
-  };
-
-  const handleRemoveDateOption = (index: number) => {
-    setDateOptions(dateOptions.filter((_, i) => i !== index));
-  };
-
-  // Location option helpers
-  const handleAddLocationOption = () => {
-    if (newLocationOptionText.trim()) {
-      setLocationOptions([...locationOptions, newLocationOptionText.trim()]);
-      setNewLocationOptionText('');
-      setErrors({});
-    }
-  };
-  const handleRemoveLocationOption = (index: number) => {
-    setLocationOptions(locationOptions.filter((_, i) => i !== index));
   };
 
   // Guest helpers
@@ -616,23 +532,33 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
   // Final Submit
   const handleFinalCreate = () => {
-    const isPoll = dateMode === 'poll' || locationMode === 'poll';
-    const finalStatus = isPoll ? 'votacion' : 'confirmado';
+    const finalStatus: MeetingStatus = 'esperando_sugerencias';
 
-    const formattedDateOptions: PollOption[] = dateMode === 'poll' 
-      ? dateOptions.map((opt, idx) => ({
-          id: opt.id || `dto-new-${Date.now()}-${idx}`,
-          text: opt.text,
-          voterIds: []
-        }))
+    const formattedDateOptions: PollOption[] = initialSuggestion
+      ? [
+          {
+            id: `dto-init-${Date.now()}`,
+            text: initialSuggestion.text,
+            voterIds: [],
+            suggestedByMemberId: organizer.id,
+            suggestedByName: organizer.name,
+          }
+        ]
       : [];
 
-    const formattedLocationOptions: PollOption[] = locationMode === 'poll'
-      ? locationOptions.map((text, idx) => ({
-          id: `lo-new-${Date.now()}-${idx}`,
-          text,
-          voterIds: []
-        }))
+    const formattedLocationOptions: PollOption[] = initialLocationSuggestion
+      ? [
+          {
+            id: `lo-init-${Date.now()}`,
+            text: initialLocationSuggestion.name,
+            address: initialLocationSuggestion.address,
+            note: initialLocationSuggestion.note,
+            mapsUrl: initialLocationSuggestion.mapsUrl,
+            voterIds: [],
+            suggestedByMemberId: organizer.id,
+            suggestedByName: organizer.name,
+          }
+        ]
       : [];
 
     const formattedTasks: MeetingTask[] = tasks.map((t, idx) => ({
@@ -642,10 +568,6 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
       completed: false
     }));
 
-    const confirmedDateText = dateMode === 'fixed' && isFixedDateConfirmed && fixedDate && fixedTime
-      ? formatSpanishDateTime(fixedDate, fixedTime)
-      : undefined;
-
     const newMeeting: Meeting = {
       id: `meet-${activeFamily.id}-${Date.now()}`,
       familyId: activeFamily.id,
@@ -654,9 +576,9 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
       status: finalStatus,
       description: description.trim() || 'Encuentro familiar para compartir momentos juntos.',
       coverUrl: customCoverUrl.trim() || selectedCover || DEFAULT_COVERS_BY_TYPE[type] || SAMPLE_MEMORY_PHOTOS[0],
-      dateTimeConfirmed: confirmedDateText,
-      locationConfirmed: locationMode === 'fixed' ? fixedLocationName.trim() : undefined,
-      locationAddress: locationMode === 'fixed' && fixedLocationAddress.trim() ? fixedLocationAddress.trim() : undefined,
+      dateTimeConfirmed: undefined,
+      locationConfirmed: undefined,
+      locationAddress: undefined,
       dateTimeOptions: formattedDateOptions,
       locationOptions: formattedLocationOptions,
       invitedMemberIds: selectedMemberIds,
@@ -950,406 +872,190 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
             <div>
               <span className="text-xs font-bold text-[#FF2EB5] uppercase tracking-wider">Paso 2 de 6</span>
               <h2 className="text-xl sm:text-2xl font-bold text-[#15172A] font-brand">Fecha y horario</h2>
-              <p className="text-xs sm:text-sm text-[#62677F]">Elige si ya tienes una fecha fija o prefieres votar entre varias opciones con fechas reales.</p>
+              <p className="text-xs sm:text-sm text-[#62677F]">Las fechas se coordinan y votan entre todos los integrantes de la familia.</p>
             </div>
 
-            {/* Mode selection buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                id="mode-poll-date-btn"
-                onClick={() => {
-                  setDateMode('poll');
-                  setIsFixedDateConfirmed(false);
-                  setFixedDateError('');
-                  setErrors((prev) => {
-                    const copy = { ...prev };
-                    delete copy.date;
-                    return copy;
-                  });
-                }}
-                className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
-                  dateMode === 'poll'
-                    ? 'border-[#8B5CFF] bg-[#8B5CFF]/10 ring-1 ring-[#8B5CFF]'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="text-sm font-bold text-[#15172A]">🗳️ Votación en familia</p>
-                <p className="text-xs text-[#62677F] mt-1">Proponer opciones para que todos elijan</p>
-              </button>
-
-              <button
-                type="button"
-                id="mode-fixed-date-btn"
-                onClick={() => {
-                  setDateMode('fixed');
-                  setErrors((prev) => {
-                    const copy = { ...prev };
-                    delete copy.date;
-                    return copy;
-                  });
-                }}
-                className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
-                  dateMode === 'fixed'
-                    ? 'border-[#287BFF] bg-[#287BFF]/10 ring-1 ring-[#287BFF]'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="text-sm font-bold text-[#15172A]">📅 Fecha confirmada</p>
-                <p className="text-xs text-[#62677F] mt-1">Establecer un día y hora exactos</p>
-              </button>
-            </div>
-
-            {/* Fixed Date Mode */}
-            {dateMode === 'fixed' ? (
-              isFixedDateConfirmed ? (
-                /* Confirmed Card */
-                <div className="bg-[#F7F8FF] p-4 sm:p-5 rounded-2xl border-2 border-[#287BFF]/30 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#287BFF]/10 text-[#287BFF] flex items-center justify-center shrink-0">
-                        <Check className="w-5 h-5 text-[#287BFF]" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#287BFF]/10 text-[#287BFF]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#287BFF]"></span>
-                          Fecha y horario confirmados
-                        </span>
-                        <p className="text-sm sm:text-base font-bold text-[#15172A] mt-1 capitalize">
-                          {formatSpanishDateOnly(fixedDate)}
-                        </p>
-                        <p className="text-xs font-semibold text-[#62677F] flex items-center gap-1 mt-0.5">
-                          <Clock className="w-3.5 h-3.5 text-[#287BFF]" />
-                          <span>{fixedTime} hs</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      id="edit-fixed-date-btn"
-                      onClick={handleEditFixedDateTime}
-                      className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-[#15172A] transition-all flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-[#287BFF]" />
-                      <span>Editar fecha</span>
-                    </button>
+            {/* Collaborative Dates Single Flow */}
+            <div className="space-y-4">
+              {/* Informative Explanation Panel */}
+              <div className="bg-[#F7F8FF] p-5 sm:p-6 rounded-2xl border border-[#8B5CFF]/30 space-y-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-[#8B5CFF]/15 text-[#8B5CFF] flex items-center justify-center shrink-0">
+                    <Vote className="w-6 h-6 text-[#8B5CFF]" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#8B5CFF]/15 text-[#8B5CFF]">
+                      A definir en familia
+                    </span>
+                    <h3 className="text-sm sm:text-base font-bold text-[#15172A]">
+                      Sugerir fechas en familia
+                    </h3>
+                    <p className="text-xs sm:text-sm text-[#62677F] leading-relaxed">
+                      Cada integrante podrá sugerir fechas. Cuando todos terminen, la familia votará y ganará la opción con más votos.
+                    </p>
                   </div>
                 </div>
-              ) : (
-                /* Form Fields & Confirmation Button */
-                <div className="space-y-4 bg-[#F7F8FF] p-4 sm:p-5 rounded-2xl border border-gray-200">
-                  <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
-                    <Calendar className="w-4 h-4 text-[#287BFF]" />
-                    <span className="text-xs font-bold text-[#15172A]">Ingresar fecha y hora exacta</span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-gray-200">
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#8B5CFF]/15 text-[#8B5CFF] font-bold text-xs flex items-center justify-center shrink-0">1</span>
+                    <span className="font-medium">Creás el encuentro</span>
                   </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Selector de fecha <span className="text-[#FF2EB5]">*</span>
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {/* Selector de Día */}
-                        <div>
-                          <select
-                            id="fixed-day-select"
-                            value={fixedDay}
-                            onChange={(e) => handleFixedDaySelect(e.target.value)}
-                            required
-                            className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Día</option>
-                            {dayOptions.map((d) => (
-                              <option key={d} value={d}>
-                                {parseInt(d, 10)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Selector de Mes */}
-                        <div>
-                          <select
-                            id="fixed-month-select"
-                            value={fixedMonth}
-                            onChange={(e) => handleFixedMonthSelect(e.target.value)}
-                            required
-                            className="w-full px-2 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Mes</option>
-                            {MONTHS_SPANISH.map((m) => (
-                              <option key={m.value} value={m.value}>
-                                {m.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Selector de Año */}
-                        <div>
-                          <select
-                            id="fixed-year-select"
-                            value={fixedYear}
-                            onChange={(e) => handleFixedYearSelect(e.target.value)}
-                            required
-                            className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Año</option>
-                            {YEAR_OPTIONS.map((y) => (
-                              <option key={y} value={y.toString()}>
-                                {y}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="fixed-time-picker" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Selector de hora <span className="text-[#FF2EB5]">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="fixed-time-picker"
-                          type="time"
-                          value={fixedTime}
-                          onChange={(e) => handleFixedTimeChange(e.target.value)}
-                          required
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
-                        />
-                      </div>
-                    </div>
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#287BFF]/15 text-[#287BFF] font-bold text-xs flex items-center justify-center shrink-0">2</span>
+                    <span className="font-medium">La familia sugiere fechas</span>
                   </div>
-
-                  {fixedDateError && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
-                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                      <span>{fixedDateError}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    id="confirm-fixed-date-btn"
-                    onClick={handleConfirmFixedDateTime}
-                    disabled={isConfirmButtonDisabled}
-                    className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                      isConfirmButtonDisabled
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-200'
-                        : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99]'
-                    }`}
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Confirmar fecha y horario</span>
-                  </button>
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5] font-bold text-xs flex items-center justify-center shrink-0">3</span>
+                    <span className="font-medium">Votan y gana la más elegida</span>
+                  </div>
                 </div>
-              )
-            ) : (
-              /* Poll Mode (Votación en familia) */
-              <div className="space-y-4">
+              </div>
+
+              {/* Section: Tu primera sugerencia */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-[#15172A]">
-                      Opciones que proponés para que la familia vote:
-                    </label>
-                    <span className="text-[11px] font-medium text-[#62677F]">
-                      {dateOptions.length} {dateOptions.length === 1 ? 'opción' : 'opciones'}
+                    <h3 className="text-sm sm:text-base font-bold text-[#15172A] flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-[#287BFF]" />
+                      Tu primera sugerencia
+                    </h3>
+                    <span className="text-[11px] font-semibold text-[#62677F] bg-gray-100 px-2 py-0.5 rounded-md">
+                      Opcional
                     </span>
                   </div>
-                  <p className="text-[11px] text-[#62677F] mt-0.5">
-                    Después de crear el encuentro, cada integrante podrá votar una de estas opciones.
+                  <p className="text-xs text-[#62677F] mt-1 leading-relaxed">
+                    Podés proponer una fecha ahora. Los demás integrantes podrán sumar otras después de creado el encuentro.
                   </p>
                 </div>
 
-                {/* List of current poll options with formatted text and delete button */}
-                <div className="space-y-2">
-                  {dateOptions.map((opt, i) => (
-                    <div 
-                      key={opt.id || i} 
-                      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#F7F8FF] border border-gray-200"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-7 h-7 rounded-lg bg-[#8B5CFF]/15 text-[#8B5CFF] font-bold text-xs flex items-center justify-center shrink-0">
-                          {i + 1}
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate">
-                            {opt.text}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#62677F]">
-                            <span className="flex items-center gap-1 font-medium">
-                              <Calendar className="w-3 h-3 text-[#8B5CFF]" /> {opt.date}
-                            </span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1 font-medium">
-                              <Clock className="w-3 h-3 text-[#287BFF]" /> {opt.time} hs
-                            </span>
-                          </div>
-                        </div>
+                {initialSuggestion ? (
+                  /* Tarjeta con la sugerencia agregada */
+                  <div className="bg-[#F7F8FF] p-4 rounded-xl border border-[#287BFF]/30 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#287BFF]/10 text-[#287BFF] flex items-center justify-center shrink-0">
+                        <Calendar className="w-5 h-5 text-[#287BFF]" />
                       </div>
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate capitalize">
+                          {initialSuggestion.text}
+                        </p>
+                        <p className="text-[11px] font-semibold text-[#287BFF] flex items-center gap-1 mt-0.5">
+                          <span>Sugerida por {organizer.name}</span>
+                        </p>
+                      </div>
+                    </div>
 
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleRemoveDateOption(i)}
-                        className="p-2 rounded-xl text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors shrink-0 cursor-pointer"
-                        aria-label={`Eliminar opción ${i + 1}`}
-                        title="Eliminar opción"
+                        onClick={handleEditInitialSuggestion}
+                        id="edit-organizer-sug-btn"
+                        className="p-2 rounded-lg text-[#62677F] hover:text-[#287BFF] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                        title="Editar sugerencia"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveInitialSuggestion}
+                        id="remove-organizer-sug-btn"
+                        className="p-2 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                        title="Eliminar sugerencia"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-
-                  {dateOptions.length === 0 && (
-                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-1">
-                      <p className="text-xs text-amber-800 font-bold">
-                        Todavía no agregaste ninguna opción.
-                      </p>
-                      <p className="text-[11px] text-amber-700 font-medium">
-                        Agregá al menos dos opciones para continuar.
-                      </p>
-                    </div>
-                  )}
-
-                  {dateOptions.length === 1 && (
-                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-xs text-amber-800">
-                      <span className="flex items-center gap-1.5 font-medium">
-                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                        Agregá al menos dos opciones para continuar.
-                      </span>
-                      <span className="font-bold text-[11px] bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded-full">
-                        1 de 2 mín.
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Form to add a new alternative option */}
-                <div className="p-4 rounded-2xl bg-[#F7F8FF] border border-gray-200 space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <Plus className="w-4 h-4 text-[#287BFF]" />
-                    <span className="text-xs font-bold text-[#15172A]">Agregar nueva alternativa</span>
                   </div>
-
-                  <div className="space-y-3">
+                ) : (
+                  /* Formulario de selectores */
+                  <div className="space-y-3 pt-1">
                     <div>
-                      <label className="block text-[11px] font-bold text-[#62677F] mb-1">
-                        Fecha <span className="text-[#FF2EB5]">*</span>
+                      <label className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Fecha propuesta
                       </label>
                       <div className="grid grid-cols-3 gap-2">
-                        {/* Selector de Día */}
-                        <div>
-                          <select
-                            id="poll-day-select"
-                            value={newOptionDay}
-                            onChange={(e) => handlePollDaySelect(e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Día</option>
-                            {dayOptionsForPoll.map((d) => (
-                              <option key={d} value={d}>
-                                {parseInt(d, 10)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <select
+                          id="sug-day-select"
+                          value={sugDay}
+                          onChange={(e) => handleSugDaySelect(e.target.value)}
+                          className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                        >
+                          <option value="">Día</option>
+                          {dayOptionsForSug.map((d) => (
+                            <option key={d} value={d}>
+                              {parseInt(d, 10)}
+                            </option>
+                          ))}
+                        </select>
 
-                        {/* Selector de Mes */}
-                        <div>
-                          <select
-                            id="poll-month-select"
-                            value={newOptionMonth}
-                            onChange={(e) => handlePollMonthSelect(e.target.value)}
-                            className="w-full px-2 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Mes</option>
-                            {MONTHS_SPANISH.map((m) => (
-                              <option key={m.value} value={m.value}>
-                                {m.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <select
+                          id="sug-month-select"
+                          value={sugMonth}
+                          onChange={(e) => handleSugMonthSelect(e.target.value)}
+                          className="w-full px-2 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                        >
+                          <option value="">Mes</option>
+                          {MONTHS_SPANISH.map((m) => (
+                            <option key={m.value} value={m.value}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
 
-                        {/* Selector de Año */}
-                        <div>
-                          <select
-                            id="poll-year-select"
-                            value={newOptionYear}
-                            onChange={(e) => handlePollYearSelect(e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                          >
-                            <option value="">Año</option>
-                            {YEAR_OPTIONS.map((y) => (
-                              <option key={y} value={y.toString()}>
-                                {y}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <select
+                          id="sug-year-select"
+                          value={sugYear}
+                          onChange={(e) => handleSugYearSelect(e.target.value)}
+                          className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                        >
+                          {YEAR_OPTIONS.map((y) => (
+                            <option key={y} value={y.toString()}>
+                              {y}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
                     <div>
-                      <label htmlFor="new-poll-time-picker" className="block text-[11px] font-bold text-[#62677F] mb-1">
-                        Hora <span className="text-[#FF2EB5]">*</span>
+                      <label htmlFor="sug-time-picker" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Horario
                       </label>
                       <input
-                        id="new-poll-time-picker"
+                        id="sug-time-picker"
                         type="time"
-                        value={newOptionTime}
-                        onChange={(e) => {
-                          setNewOptionTime(e.target.value);
-                          setOptionError('');
-                        }}
-                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF]"
+                        value={sugTime}
+                        onChange={(e) => handleSugTimeChange(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
                       />
                     </div>
+
+                    {sugError && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                        <span>{sugError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      id="add-organizer-sug-btn"
+                      onClick={handleAddInitialSuggestion}
+                      disabled={isAddSugDisabled}
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                        isAddSugDisabled
+                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                          : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white shadow-xs cursor-pointer'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Agregar mi sugerencia</span>
+                    </button>
                   </div>
-
-                  {/* Formatted live preview if both date and time chosen */}
-                  {newOptionDate && newOptionTime && (
-                    <div className="p-2.5 rounded-lg bg-white border border-[#8B5CFF]/20 text-[11px] flex items-center justify-between">
-                      <span className="text-[#62677F]">Vista previa:</span>
-                      <strong className="text-[#15172A] font-bold">
-                        {formatSpanishDateTime(newOptionDate, newOptionTime)}
-                      </strong>
-                    </div>
-                  )}
-
-                  {optionError && (
-                    <p className="text-xs text-red-500 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>{optionError}</span>
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    id="add-date-option-btn"
-                    onClick={handleAddDateOption}
-                    disabled={isAddOptionDisabled}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
-                      isAddOptionDisabled
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-200'
-                        : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer hover:scale-[1.01] active:scale-[0.99]'
-                    }`}
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Agregar opción a la votación</span>
-                  </button>
-                </div>
+                )}
               </div>
-            )}
-
-            {errors.date && (
-              <p className="text-xs text-red-500 flex items-center gap-1 font-medium bg-red-50 p-2.5 rounded-xl border border-red-200">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errors.date}</span>
-              </p>
-            )}
+            </div>
           </motion.div>
         )}
 
@@ -1359,109 +1065,209 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
             <div>
               <span className="text-xs font-bold text-[#FF2EB5] uppercase tracking-wider">Paso 3 de 6</span>
               <h2 className="text-xl sm:text-2xl font-bold text-[#15172A] font-brand">Lugar del encuentro</h2>
-              <p className="text-xs sm:text-sm text-[#62677F]">Elige si ya tienes un lugar listo o deseas abrir votación.</p>
+              <p className="text-xs sm:text-sm text-[#62677F]">Los lugares se coordinan y votan entre todos los integrantes de la familia.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setLocationMode('poll')}
-                className={`p-4 rounded-2xl border text-left transition-all ${
-                  locationMode === 'poll'
-                    ? 'border-[#8B5CFF] bg-[#8B5CFF]/10 ring-1 ring-[#8B5CFF]'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="text-sm font-bold text-[#15172A]">🗳️ Votación de lugares</p>
-                <p className="text-xs text-[#62677F] mt-1">Elegir entre varias opciones de lugar</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setLocationMode('fixed')}
-                className={`p-4 rounded-2xl border text-left transition-all ${
-                  locationMode === 'fixed'
-                    ? 'border-[#287BFF] bg-[#287BFF]/10 ring-1 ring-[#287BFF]'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="text-sm font-bold text-[#15172A]">📍 Lugar confirmado</p>
-                <p className="text-xs text-[#62677F] mt-1">Ubicación ya acordada</p>
-              </button>
-            </div>
-
-            {locationMode === 'fixed' ? (
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="fixed-location-name-input" className="block text-xs font-bold text-[#15172A] mb-1">
-                    Nombre del lugar <span className="text-[#FF2EB5]">*</span>
-                  </label>
-                  <input
-                    id="fixed-location-name-input"
-                    type="text"
-                    value={fixedLocationName}
-                    onChange={(e) => setFixedLocationName(e.target.value)}
-                    placeholder="Ej. Casa de Ana, Restaurante La Estancia..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-[#15172A] bg-[#F7F8FF] focus:bg-white focus:outline-none focus:border-[#287BFF]"
-                  />
+            {/* Collaborative Location Single Flow */}
+            <div className="space-y-4">
+              {/* Informative Explanation Panel */}
+              <div className="bg-[#F7F8FF] p-5 sm:p-6 rounded-2xl border border-[#FF2EB5]/30 space-y-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-[#FF2EB5]/15 text-[#FF2EB5] flex items-center justify-center shrink-0">
+                    <Vote className="w-6 h-6 text-[#FF2EB5]" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FF2EB5]/15 text-[#FF2EB5]">
+                      A definir en familia
+                    </span>
+                    <h3 className="text-sm sm:text-base font-bold text-[#15172A]">
+                      Sugerir lugares en familia
+                    </h3>
+                    <p className="text-xs sm:text-sm text-[#62677F] leading-relaxed">
+                      Cada integrante podrá sugerir lugares. Cuando todos terminen, la familia votará y ganará la opción con más votos.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor="fixed-location-addr-input" className="block text-xs font-bold text-[#15172A] mb-1">
-                    Dirección o referencia <span className="text-xs font-normal text-[#62677F]">(Opcional)</span>
-                  </label>
-                  <input
-                    id="fixed-location-addr-input"
-                    type="text"
-                    value={fixedLocationAddress}
-                    onChange={(e) => setFixedLocationAddress(e.target.value)}
-                    placeholder="Ej. Calle Los Olivos 240, Barrio San Carlos"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-[#15172A] bg-[#F7F8FF] focus:bg-white focus:outline-none focus:border-[#287BFF]"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-gray-200">
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5] font-bold text-xs flex items-center justify-center shrink-0">1</span>
+                    <span className="font-medium">Creás el encuentro</span>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#8B5CFF]/15 text-[#8B5CFF] font-bold text-xs flex items-center justify-center shrink-0">2</span>
+                    <span className="font-medium">La familia sugiere lugares</span>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
+                    <span className="w-6 h-6 rounded-full bg-[#287BFF]/15 text-[#287BFF] font-bold text-xs flex items-center justify-center shrink-0">3</span>
+                    <span className="font-medium">Votan y gana el más elegido</span>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <label className="block text-xs font-bold text-[#15172A]">
-                  Opciones de lugares para votar:
-                </label>
 
-                <div className="space-y-2">
-                  {locationOptions.map((opt, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2 p-3 rounded-xl bg-[#F7F8FF] border border-gray-200 text-xs font-medium text-[#15172A]">
-                      <span>{opt}</span>
+              {/* Section: Tu primera sugerencia */}
+              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm sm:text-base font-bold text-[#15172A] flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-[#FF2EB5]" />
+                      Tu primera sugerencia
+                    </h3>
+                    <span className="text-[11px] font-semibold text-[#62677F] bg-gray-100 px-2 py-0.5 rounded-md">
+                      Opcional
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#62677F] mt-1 leading-relaxed">
+                    Podés proponer un lugar ahora. Los demás integrantes podrán sumar otros después de creado el encuentro.
+                  </p>
+                </div>
+
+                {initialLocationSuggestion ? (
+                  /* Tarjeta con la sugerencia agregada */
+                  <div className="bg-[#F7F8FF] p-4 rounded-xl border border-[#FF2EB5]/30 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FF2EB5]/10 text-[#FF2EB5] flex items-center justify-center shrink-0 mt-0.5">
+                        <MapPin className="w-5 h-5 text-[#FF2EB5]" />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate">
+                          {initialLocationSuggestion.name}
+                        </p>
+                        {initialLocationSuggestion.address && (
+                          <p className="text-xs text-[#62677F] flex items-center gap-1">
+                            <span className="truncate">📍 {initialLocationSuggestion.address}</span>
+                          </p>
+                        )}
+                        {initialLocationSuggestion.note && (
+                          <p className="text-xs text-[#62677F] italic">
+                            💬 "{initialLocationSuggestion.note}"
+                          </p>
+                        )}
+                        {initialLocationSuggestion.mapsUrl && (
+                          <a
+                            href={initialLocationSuggestion.mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#287BFF] hover:underline"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Ver en Google Maps</span>
+                          </a>
+                        )}
+                        <p className="text-[11px] font-semibold text-[#FF2EB5] flex items-center gap-1 pt-0.5">
+                          <span>Sugerido por {organizer.name}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleRemoveLocationOption(i)}
-                        className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
-                        aria-label="Eliminar opción de lugar"
+                        onClick={handleEditInitialLocationSuggestion}
+                        id="edit-organizer-loc-sug-btn"
+                        className="p-2 rounded-lg text-[#62677F] hover:text-[#FF2EB5] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                        title="Editar sugerencia de lugar"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveInitialLocationSuggestion}
+                        id="remove-organizer-loc-sug-btn"
+                        className="p-2 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                        title="Eliminar sugerencia de lugar"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  /* Formulario de campos para el lugar */
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label htmlFor="sug-loc-name-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Nombre del lugar <span className="text-[#FF2EB5]">*</span>
+                      </label>
+                      <input
+                        id="sug-loc-name-input"
+                        type="text"
+                        value={sugLocName}
+                        onChange={(e) => {
+                          setSugLocName(e.target.value);
+                          setSugLocError('');
+                        }}
+                        placeholder="Ej. Casa de Ana, Restaurante La Estancia, Club..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                      />
+                    </div>
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newLocationOptionText}
-                    onChange={(e) => setNewLocationOptionText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddLocationOption())}
-                    placeholder="Ej. Quinta Los Aromos, Parque Centenario..."
-                    className="flex-1 px-3.5 py-2 rounded-xl border border-gray-200 text-xs text-[#15172A] bg-[#F7F8FF] focus:bg-white focus:outline-none focus:border-[#287BFF]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddLocationOption}
-                    className="px-3.5 py-2 rounded-xl bg-[#287BFF] text-white text-xs font-bold flex items-center gap-1 hover:bg-[#1a6beb]"
-                  >
-                    <Plus className="w-4 h-4" /> Agregar
-                  </button>
-                </div>
+                    <div>
+                      <label htmlFor="sug-loc-address-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Dirección o ubicación <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                      </label>
+                      <input
+                        id="sug-loc-address-input"
+                        type="text"
+                        value={sugLocAddress}
+                        onChange={(e) => setSugLocAddress(e.target.value)}
+                        placeholder="Ej. Calle Los Olivos 240, Barrio San Carlos..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="sug-loc-note-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Nota o detalle <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                      </label>
+                      <input
+                        id="sug-loc-note-input"
+                        type="text"
+                        value={sugLocNote}
+                        onChange={(e) => setSugLocNote(e.target.value)}
+                        placeholder="Ej. Tiene mesas afuera, hay que reservar..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="sug-loc-maps-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                        Enlace de Google Maps <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                      </label>
+                      <input
+                        id="sug-loc-maps-input"
+                        type="url"
+                        value={sugLocMapsUrl}
+                        onChange={(e) => setSugLocMapsUrl(e.target.value)}
+                        placeholder="Ej. https://maps.app.goo.gl/..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                      />
+                    </div>
+
+                    {sugLocError && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                        <span>{sugLocError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      id="add-organizer-loc-sug-btn"
+                      onClick={handleAddInitialLocationSuggestion}
+                      disabled={!sugLocName.trim()}
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                        !sugLocName.trim()
+                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                          : 'bg-[#FF2EB5] hover:bg-[#e0209e] text-white shadow-xs cursor-pointer'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Agregar mi sugerencia</span>
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-
-            {errors.location && <p className="text-xs text-red-500">{errors.location}</p>}
+            </div>
           </motion.div>
         )}
 
@@ -1694,20 +1500,44 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                   <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center gap-1 mb-1">
                     <Clock className="w-3 h-3 text-[#287BFF]" /> Fecha y hora
                   </p>
-                  <p className="font-semibold text-[#15172A]">
-                    {dateMode === 'fixed' 
-                      ? (isFixedDateConfirmed && fixedDate && fixedTime ? formatSpanishDateTime(fixedDate, fixedTime) : 'Fecha no confirmada')
-                      : `🗳️ Votación (${dateOptions.length} opciones)`}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-[#15172A]">Fecha a definir en familia</p>
+                    <p className="text-xs text-[#62677F]">
+                      {initialSuggestion ? (
+                        <>
+                          Primera sugerencia:{' '}
+                          <span className="font-semibold text-[#15172A] capitalize">
+                            {initialSuggestion.text}
+                          </span>{' '}
+                          · por {organizer.name}
+                        </>
+                      ) : (
+                        'Todavía no hay fechas sugeridas.'
+                      )}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-gray-100">
                   <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center gap-1 mb-1">
                     <MapPin className="w-3 h-3 text-[#FF2EB5]" /> Lugar
                   </p>
-                  <p className="font-semibold text-[#15172A]">
-                    {locationMode === 'fixed' ? fixedLocationName : `🗳️ Votación (${locationOptions.length} opciones)`}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-[#15172A]">Lugar a definir en familia</p>
+                    <p className="text-xs text-[#62677F]">
+                      {initialLocationSuggestion ? (
+                        <>
+                          Primera sugerencia:{' '}
+                          <span className="font-semibold text-[#15172A]">
+                            {initialLocationSuggestion.name}
+                          </span>{' '}
+                          · por {organizer.name}
+                        </>
+                      ) : (
+                        'Todavía no hay lugares sugeridos.'
+                      )}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -1779,16 +1609,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
               id="wizard-next-step-btn"
               type="button"
               onClick={handleNextStep}
-              disabled={
-                (currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed) ||
-                (currentStep === 2 && dateMode === 'poll' && dateOptions.length < 2)
-              }
-              className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors shadow-sm ${
-                (currentStep === 2 && dateMode === 'fixed' && !isFixedDateConfirmed) ||
-                (currentStep === 2 && dateMode === 'poll' && dateOptions.length < 2)
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed border border-gray-200'
-                  : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer'
-              }`}
+              className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors shadow-sm bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer"
             >
               <span>Siguiente</span>
               <ArrowRight className="w-4 h-4" />

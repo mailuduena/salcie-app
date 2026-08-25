@@ -9,6 +9,7 @@ export type MeetingType =
 export type MeetingStatus = 
   | 'propuesta' 
   | 'votacion' 
+  | 'esperando_sugerencias'
   | 'confirmado' 
   | 'finalizado';
 
@@ -31,7 +32,11 @@ export interface PollOption {
   id: string;
   text: string;
   note?: string;
+  address?: string;
+  mapsUrl?: string;
   voterIds: string[];
+  suggestedByMemberId?: string;
+  suggestedByName?: string;
 }
 
 export interface RSVPResponse {
