@@ -97,6 +97,20 @@ function MainApp() {
     setFamilies(updated);
   };
 
+  const handleSwitchMember = (memberId: string) => {
+    if (!activeFamily) return;
+    const updatedFamily: Family = {
+      ...activeFamily,
+      members: activeFamily.members.map((m) => ({
+        ...m,
+        isCurrentUser: m.id === memberId,
+      })),
+    };
+    handleUpdateFamily(updatedFamily);
+    const switched = activeFamily.members.find((m) => m.id === memberId);
+    showToast(`🎭 Probando la demo como: ${switched?.name || 'integrante'}`);
+  };
+
   const handleSelectMeeting = (meetingId: string) => {
     setSelectedMeetingId(meetingId);
     setCurrentScreen('meeting_detail');
@@ -120,6 +134,47 @@ function MainApp() {
     setSelectedMeetingId(null);
     setCurrentScreen('meetings');
     showToast('Encuentro eliminado.');
+  };
+
+  const handleDeleteFamily = (familyId: string) => {
+    if (families.length <= 1) {
+      showToast('No se puede eliminar la única familia disponible.');
+      return;
+    }
+
+    const updatedFamilies = families.filter((f) => f.id !== familyId);
+    const updatedMeetings = meetings.filter((m) => m.familyId !== familyId);
+
+    setFamilies(updatedFamilies);
+    setMeetings(updatedMeetings);
+    saveStoredFamilies(updatedFamilies);
+    saveStoredMeetings(updatedMeetings);
+
+    // If deleted family was active, switch to another available family
+    if (activeFamilyId === familyId) {
+      const nextFamily = updatedFamilies[0];
+      if (nextFamily) {
+        setActiveFamilyId(nextFamily.id);
+        // Ensure the new active family has an active profile
+        const hasCurrentUser = nextFamily.members.some((m) => m.isCurrentUser);
+        if (!hasCurrentUser && nextFamily.members.length > 0) {
+          const fixedNextFamily: Family = {
+            ...nextFamily,
+            members: nextFamily.members.map((m, idx) => ({
+              ...m,
+              isCurrentUser: idx === 0,
+            })),
+          };
+          const finalFamilies = updatedFamilies.map((f) =>
+            f.id === fixedNextFamily.id ? fixedNextFamily : f
+          );
+          setFamilies(finalFamilies);
+          saveStoredFamilies(finalFamilies);
+        }
+      }
+    }
+
+    showToast('Familia eliminada correctamente');
   };
 
   const handleResetDemoData = () => {
@@ -150,6 +205,7 @@ function MainApp() {
           onSelectFamily={handleSelectFamily}
           onOpenNewFamilyModal={() => setIsNewFamilyModalOpen(true)}
           onResetDemo={() => setIsResetConfirmOpen(true)}
+          onSwitchMember={handleSwitchMember}
         />
       )}
 
@@ -175,6 +231,7 @@ function MainApp() {
             meetings={meetings}
             onSelectFamily={handleSelectFamily}
             onOpenNewFamilyModal={() => setIsNewFamilyModalOpen(true)}
+            onDeleteFamily={handleDeleteFamily}
           />
         )}
 
@@ -185,6 +242,7 @@ function MainApp() {
             onNavigate={(screen) => setCurrentScreen(screen)}
             onSelectMeeting={handleSelectMeeting}
             onOpenFamiliesScreen={() => setCurrentScreen('families')}
+            onSwitchMember={handleSwitchMember}
           />
         )}
 
@@ -204,6 +262,7 @@ function MainApp() {
             onBack={() => setCurrentScreen('meetings')}
             onUpdateMeeting={handleUpdateMeeting}
             onDeleteMeeting={handleDeleteMeeting}
+            onSwitchMember={handleSwitchMember}
           />
         )}
 
@@ -227,6 +286,7 @@ function MainApp() {
           <FamilyMembersScreen
             activeFamily={activeFamily}
             onUpdateFamily={handleUpdateFamily}
+            onSwitchMember={handleSwitchMember}
           />
         )}
 

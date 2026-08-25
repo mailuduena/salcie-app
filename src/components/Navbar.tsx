@@ -7,9 +7,11 @@ import {
   Camera, 
   Users, 
   RotateCcw,
-  Sparkles
+  Sparkles,
+  Check,
+  UserCheck
 } from 'lucide-react';
-import { ActiveScreen, Family } from '../types';
+import { ActiveScreen, Family, FamilyMember } from '../types';
 
 interface NavbarProps {
   currentScreen: ActiveScreen;
@@ -19,6 +21,7 @@ interface NavbarProps {
   onSelectFamily: (familyId: string) => void;
   onOpenNewFamilyModal: () => void;
   onResetDemo: () => void;
+  onSwitchMember: (memberId: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,17 +32,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectFamily,
   onOpenNewFamilyModal,
   onResetDemo,
+  onSwitchMember,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const memberDropdownRef = useRef<HTMLDivElement>(null);
 
   const activeFamily = families.find((f) => f.id === activeFamilyId) || families[0];
+  const currentMember = activeFamily?.members.find((m) => m.isCurrentUser) || activeFamily?.members[0];
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (memberDropdownRef.current && !memberDropdownRef.current.contains(event.target as Node)) {
+        setMemberDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -82,8 +92,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="relative" ref={dropdownRef}>
                 <button
                   id="family-selector-btn"
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F7F8FF] hover:bg-[#ebedff] border border-[#287BFF]/20 text-[#15172A] text-xs sm:text-sm font-semibold transition-all"
+                  onClick={() => {
+                    setDropdownOpen(!dropdownOpen);
+                    setMemberDropdownOpen(false);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F7F8FF] hover:bg-[#ebedff] border border-[#287BFF]/20 text-[#15172A] text-xs sm:text-sm font-semibold transition-all cursor-pointer"
                   aria-expanded={dropdownOpen}
                   aria-label="Cambiar de espacio familiar"
                 >
@@ -108,7 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           onSelectFamily(fam.id);
                           setDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-3.5 py-2.5 flex items-center justify-between text-xs sm:text-sm transition-colors ${
+                        className={`w-full text-left px-3.5 py-2.5 flex items-center justify-between text-xs sm:text-sm transition-colors cursor-pointer ${
                           fam.id === activeFamilyId
                             ? 'bg-[#287BFF]/10 text-[#287BFF] font-bold'
                             : 'text-[#15172A] hover:bg-gray-50'
@@ -136,7 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setDropdownOpen(false);
                         onOpenNewFamilyModal();
                       }}
-                      className="w-full text-left px-3.5 py-2 text-xs font-semibold text-[#FF2EB5] hover:bg-[#FF2EB5]/5 flex items-center gap-2 transition-colors"
+                      className="w-full text-left px-3.5 py-2 text-xs font-semibold text-[#FF2EB5] hover:bg-[#FF2EB5]/5 flex items-center gap-2 transition-colors cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       Crear nueva familia
@@ -157,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={item.id}
                   id={`nav-link-${item.id}`}
                   onClick={() => onNavigate(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                     isActive
                       ? 'text-[#287BFF] bg-[#287BFF]/10'
                       : 'text-[#62677F] hover:text-[#15172A] hover:bg-gray-50'
@@ -170,38 +183,135 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Actions & User Profile */}
+          {/* Actions & Interactive Persona Switcher */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Desktop "Crear encuentro" CTA */}
             <button
               id="desktop-create-meeting-btn"
               onClick={() => onNavigate('create_meeting')}
-              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl gradient-salcie-btn text-xs sm:text-sm font-bold shadow-md transition-transform hover:scale-102 active:scale-98"
+              className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl gradient-salcie-btn text-xs sm:text-sm font-bold shadow-md transition-transform hover:scale-102 active:scale-98 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Crear encuentro</span>
             </button>
 
-            {/* Current user badge "Mai" */}
-            <div 
-              id="user-badge"
-              className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-gray-200"
-            >
-              <div className="w-8 h-8 rounded-full bg-[#FF2EB5] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                M
+            {/* Interactive Demo Persona Switcher */}
+            {currentMember && activeFamily && (
+              <div className="relative" ref={memberDropdownRef}>
+                <button 
+                  id="user-badge"
+                  onClick={() => {
+                    setMemberDropdownOpen(!memberDropdownOpen);
+                    setDropdownOpen(false);
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-[#FF2EB5]/25 bg-[#FF2EB5]/5 hover:bg-[#FF2EB5]/10 text-left transition-all cursor-pointer group"
+                  title="Cambiar integrante para probar la demo"
+                  aria-expanded={memberDropdownOpen}
+                >
+                  <div 
+                    className="w-8 h-8 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
+                    style={{ backgroundColor: currentMember.avatarColor || '#FF2EB5' }}
+                  >
+                    {currentMember.name.charAt(0)}
+                  </div>
+                  <div className="text-left hidden sm:block">
+                    <div className="flex items-center gap-1">
+                      <p className="text-xs font-bold text-[#15172A] leading-tight group-hover:text-[#FF2EB5] transition-colors truncate max-w-[90px] lg:max-w-[120px]">
+                        {currentMember.name}
+                      </p>
+                      <span className="text-[10px] text-[#FF2EB5] font-semibold bg-[#FF2EB5]/15 px-1 rounded">
+                        Demo
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#62677F] truncate max-w-[90px] lg:max-w-[120px]">
+                      {currentMember.relation || (currentMember.role === 'admin' ? 'Admin' : 'Integrante')}
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-[#62677F] transition-transform ${memberDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Member Dropdown Menu */}
+                {memberDropdownOpen && (
+                  <div 
+                    id="member-selector-dropdown"
+                    className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-white shadow-xl border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="p-3 bg-gradient-to-r from-[#FF2EB5]/10 to-[#8B5CFF]/10 rounded-xl mb-2 border border-[#FF2EB5]/15">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#15172A]">
+                        <UserCheck className="w-4 h-4 text-[#FF2EB5]" />
+                        <span>Probar como otro integrante</span>
+                      </div>
+                      <p className="text-[11px] text-[#62677F] mt-1 leading-relaxed">
+                        Seleccioná un integrante de la <strong>{activeFamily.name}</strong> para ver y probar la app desde su perspectiva (votar, sugerir fechas/lugares, asumir tareas).
+                      </p>
+                    </div>
+
+                    <div className="px-2 py-1 text-[10px] font-bold text-[#62677F] uppercase tracking-wider">
+                      Integrantes de {activeFamily.name}
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                      {activeFamily.members.map((member) => {
+                        const isSelected = member.id === currentMember.id;
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              onSwitchMember(member.id);
+                              setMemberDropdownOpen(false);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#FF2EB5]/10 border border-[#FF2EB5]/30 text-[#15172A]'
+                                : 'hover:bg-gray-50 border border-transparent text-[#15172A]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className="w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs"
+                                style={{ backgroundColor: member.avatarColor || '#287BFF' }}
+                              >
+                                {member.name.charAt(0)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-bold truncate">{member.name}</p>
+                                  {member.role === 'admin' && (
+                                    <span className="text-[9px] font-semibold bg-[#FF2EB5]/15 text-[#FF2EB5] px-1.5 py-0.2 rounded">
+                                      Admin
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-[#62677F] truncate">
+                                  {member.relation || 'Integrante'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {isSelected ? (
+                              <span className="text-[10px] font-bold bg-[#FF2EB5] text-white px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                <Check className="w-3 h-3" /> Activo
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-[#62677F] group-hover:text-[#287BFF] shrink-0">
+                                Probar →
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="hidden lg:block text-left">
-                <p className="text-xs font-bold text-[#15172A] leading-tight">Mai</p>
-                <p className="text-[10px] text-[#62677F]">Admin</p>
-              </div>
-            </div>
+            )}
 
             {/* Reset Demo button */}
             <button
               id="reset-demo-btn"
               onClick={onResetDemo}
               title="Reiniciar datos de la demo a los iniciales"
-              className="p-2 text-[#62677F] hover:text-[#15172A] hover:bg-gray-100 rounded-xl transition-colors"
+              className="p-2 text-[#62677F] hover:text-[#15172A] hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
               aria-label="Reiniciar demo"
             >
               <RotateCcw className="w-4 h-4" />

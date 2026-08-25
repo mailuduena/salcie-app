@@ -10,7 +10,8 @@ import {
   Trash2, 
   Check, 
   Copy,
-  Sparkles
+  Sparkles,
+  UserCheck
 } from 'lucide-react';
 import { Family, FamilyMember } from '../types';
 import { useToast } from '../components/ToastContext';
@@ -20,11 +21,13 @@ import { ConfirmModal } from '../components/ConfirmModal';
 interface FamilyMembersScreenProps {
   activeFamily: Family;
   onUpdateFamily: (family: Family) => void;
+  onSwitchMember?: (memberId: string) => void;
 }
 
 export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
   activeFamily,
   onUpdateFamily,
+  onSwitchMember,
 }) => {
   const { showToast } = useToast();
 
@@ -126,7 +129,7 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
         </div>
       </div>
 
-      {/* Role Explanation Card */}
+      {/* Role Explanation Card & Demo Guide */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 rounded-2xl bg-white border border-gray-100 shadow-xs flex items-start gap-3">
           <div className="w-9 h-9 rounded-xl bg-[#FF2EB5]/10 text-[#FF2EB5] flex items-center justify-center shrink-0 mt-0.5">
@@ -153,6 +156,21 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
         </div>
       </div>
 
+      {/* Demo Switcher Quick Guide Card */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-[#FF2EB5]/10 via-[#8B5CFF]/10 to-[#287BFF]/10 border border-[#FF2EB5]/20 flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-white text-[#FF2EB5] flex items-center justify-center shrink-0 shadow-xs">
+          <UserCheck className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="text-xs font-bold text-[#15172A]">
+            Prueba interactiva multi-usuario
+          </h3>
+          <p className="text-[11px] text-[#62677F] leading-relaxed mt-0.5">
+            SalCie está pensada para usarse en familia. Hacé clic en <strong>“Probar como [Nombre]”</strong> en cualquier integrante para navegar la aplicación como esa persona y probar cómo vota fechas, propone lugares o confirma asistencia.
+          </p>
+        </div>
+      </div>
+
       {/* Members List */}
       <div className="bg-white rounded-3xl p-6 sm:p-7 border border-gray-100 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -171,7 +189,11 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: idx * 0.04 }}
-              className="p-4 rounded-2xl border border-gray-100 hover:border-[#287BFF]/30 bg-[#F7F8FF]/50 hover:bg-[#F7F8FF] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                member.isCurrentUser
+                  ? 'border-[#FF2EB5]/40 bg-[#FF2EB5]/5 ring-1 ring-[#FF2EB5]/20'
+                  : 'border-gray-100 hover:border-[#287BFF]/30 bg-[#F7F8FF]/50 hover:bg-[#F7F8FF]'
+              }`}
             >
               {/* Member Avatar & Details */}
               <div className="flex items-center gap-3.5">
@@ -183,13 +205,20 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-bold text-[#15172A]">{member.name}</h3>
                     {member.isCurrentUser && (
-                      <span className="px-2 py-0.2 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5] text-[10px] font-bold">
-                        Tú
+                      <span className="px-2 py-0.5 rounded-full bg-[#FF2EB5] text-white text-[10px] font-bold shadow-xs">
+                        Activo en demo (Tú)
                       </span>
                     )}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      member.role === 'admin'
+                        ? 'bg-[#FF2EB5]/10 text-[#FF2EB5] border border-[#FF2EB5]/20'
+                        : 'bg-white text-[#287BFF] border border-[#287BFF]/20'
+                    }`}>
+                      {member.role === 'admin' ? 'Administrador' : 'Integrante'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[#62677F] mt-0.5">
                     {member.relation && (
@@ -200,23 +229,33 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
                 </div>
               </div>
 
-              {/* Role Badge & Actions */}
-              <div className="flex items-center gap-3 self-end sm:self-center">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  member.role === 'admin'
-                    ? 'bg-[#FF2EB5]/10 text-[#FF2EB5] border border-[#FF2EB5]/20'
-                    : 'bg-white text-[#287BFF] border border-[#287BFF]/20'
-                }`}>
-                  {member.role === 'admin' ? 'Administrador' : 'Integrante'}
-                </span>
+              {/* Demo switch button & Actions */}
+              <div className="flex items-center gap-2 self-end md:self-center flex-wrap">
+                {onSwitchMember && (
+                  member.isCurrentUser ? (
+                    <span className="px-3 py-1.5 rounded-xl bg-[#FF2EB5]/10 text-[#FF2EB5] text-xs font-bold flex items-center gap-1 border border-[#FF2EB5]/20">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Navegando como {member.name}</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onSwitchMember(member.id)}
+                      className="px-3 py-1.5 rounded-xl border border-[#FF2EB5]/40 bg-white hover:bg-[#FF2EB5]/10 text-[#FF2EB5] text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs hover:scale-102 active:scale-98 cursor-pointer"
+                      title={`Probar la demo como ${member.name}`}
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Probar como {member.name}</span>
+                    </button>
+                  )
+                )}
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 pl-1 border-l border-gray-200">
                   <button
                     onClick={() => {
                       setEditingMember(member);
                       setIsAddModalOpen(true);
                     }}
-                    className="p-1.5 text-[#62677F] hover:text-[#15172A] hover:bg-white rounded-lg transition-colors"
+                    className="p-1.5 text-[#62677F] hover:text-[#15172A] hover:bg-white rounded-lg transition-colors cursor-pointer"
                     title="Editar integrante"
                     aria-label={`Editar ${member.name}`}
                   >
@@ -226,7 +265,7 @@ export const FamilyMembersScreen: React.FC<FamilyMembersScreenProps> = ({
                   {!member.isCurrentUser && (
                     <button
                       onClick={() => setDeletingMember(member)}
-                      className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                       title="Eliminar de la familia"
                       aria-label={`Eliminar a ${member.name}`}
                     >

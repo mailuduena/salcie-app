@@ -9,12 +9,10 @@ export const INITIAL_FAMILIES: Family[] = [
     createdAt: '2026-01-10',
     members: [
       { id: 'm-mai', name: 'Mai', relation: 'Tú', role: 'admin', inviteStatus: 'accepted', isCurrentUser: true, avatarColor: '#FF2EB5' },
-      { id: 'm-tomas', name: 'Tomás', relation: 'Hermano', role: 'member', inviteStatus: 'accepted', avatarColor: '#287BFF' },
-      { id: 'm-ana', name: 'Ana', relation: 'Mamá', role: 'member', inviteStatus: 'accepted', avatarColor: '#8B5CFF' },
-      { id: 'm-carlos', name: 'Carlos', relation: 'Papá', role: 'member', inviteStatus: 'accepted', avatarColor: '#00C8FF' },
-      { id: 'm-lucia', name: 'Lucía', relation: 'Prima', role: 'member', inviteStatus: 'accepted', avatarColor: '#FF5C93' },
-      { id: 'm-martin', name: 'Martín', relation: 'Tío', role: 'member', inviteStatus: 'accepted', avatarColor: '#10B981' },
-      { id: 'm-sofia', name: 'Sofía', relation: 'Hermana', role: 'member', inviteStatus: 'accepted', avatarColor: '#F59E0B' },
+      { id: 'm-kev', name: 'Kev', relation: 'Pareja', role: 'member', inviteStatus: 'accepted', avatarColor: '#287BFF' },
+      { id: 'm-lei', name: 'Lei', relation: 'Hermana', role: 'member', inviteStatus: 'accepted', avatarColor: '#8B5CFF' },
+      { id: 'm-emi', name: 'Emi', relation: 'Cuñado', role: 'member', inviteStatus: 'accepted', avatarColor: '#10B981' },
+      { id: 'm-gra', name: 'Gra', relation: 'Mamá', role: 'member', inviteStatus: 'accepted', avatarColor: '#F59E0B' },
     ]
   },
   {
@@ -47,45 +45,51 @@ export const INITIAL_MEETINGS: Meeting[] = [
         id: 'dto-1',
         text: 'Domingo 30 de agosto a las 13:00',
         note: 'Opción con mayor preferencia hasta el momento',
-        voterIds: ['m-mai', 'm-tomas', 'm-carlos', 'm-lucia']
+        voterIds: ['m-mai', 'm-kev', 'm-lei'],
+        suggestedByMemberId: 'm-mai',
+        suggestedByName: 'Mai'
       },
       {
         id: 'dto-2',
         text: 'Domingo 6 de septiembre a las 13:00',
         note: 'Fin de semana siguiente',
-        voterIds: ['m-ana', 'm-martin']
+        voterIds: ['m-emi', 'm-gra'],
+        suggestedByMemberId: 'm-gra',
+        suggestedByName: 'Gra'
       }
     ],
     locationOptions: [
       {
         id: 'lo-1',
-        text: 'Casa de Ana',
+        text: 'Casa de Gra',
         note: 'Patio amplio, sombra y parrilla lista para usar',
-        voterIds: ['m-mai', 'm-ana', 'm-tomas', 'm-sofia']
+        voterIds: ['m-mai', 'm-gra', 'm-kev'],
+        suggestedByMemberId: 'm-gra',
+        suggestedByName: 'Gra'
       },
       {
         id: 'lo-2',
         text: 'Quinta Los Aromos',
         note: 'Espacio verde al aire libre con mesas y parque',
-        voterIds: ['m-carlos', 'm-lucia']
+        voterIds: ['m-lei', 'm-emi'],
+        suggestedByMemberId: 'm-emi',
+        suggestedByName: 'Emi'
       }
     ],
-    invitedMemberIds: ['m-mai', 'm-tomas', 'm-ana', 'm-carlos', 'm-lucia', 'm-martin', 'm-sofia'],
+    invitedMemberIds: ['m-mai', 'm-kev', 'm-lei', 'm-emi', 'm-gra'],
     rsvps: [
       { memberId: 'm-mai', status: 'voy' },
-      { memberId: 'm-tomas', status: 'voy' },
-      { memberId: 'm-ana', status: 'voy' },
-      { memberId: 'm-carlos', status: 'voy' },
-      { memberId: 'm-lucia', status: 'voy' },
-      { memberId: 'm-martin', status: 'quizas' },
-      { memberId: 'm-sofia', status: 'no_voy' }
+      { memberId: 'm-kev', status: 'voy' },
+      { memberId: 'm-lei', status: 'voy' },
+      { memberId: 'm-emi', status: 'quizas' },
+      { memberId: 'm-gra', status: 'voy' }
     ],
     tasks: [
       { id: 't-1', title: 'Llevar el postre (Tarta de frutillas)', assignedMemberId: 'm-mai', completed: false },
-      { id: 't-2', title: 'Llevar las bebidas y hielo', assignedMemberId: 'm-tomas', completed: true },
-      { id: 't-3', title: 'Comprar carne y carbón', assignedMemberId: 'm-carlos', completed: true },
-      { id: 't-4', title: 'Preparar ensaladas variadas', assignedMemberId: 'm-ana', completed: false },
-      { id: 't-5', title: 'Llevar juegos de cartas y música', assignedMemberId: 'm-lucia', completed: false }
+      { id: 't-2', title: 'Llevar las bebidas y hielo', assignedMemberId: 'm-kev', completed: true },
+      { id: 't-3', title: 'Comprar carne y carbón', assignedMemberId: 'm-emi', completed: true },
+      { id: 't-4', title: 'Preparar ensaladas variadas', assignedMemberId: 'm-gra', completed: false },
+      { id: 't-5', title: 'Llevar juegos de cartas y música', assignedMemberId: 'm-lei', completed: false }
     ],
     memories: [],
     createdAt: '2026-08-20'
@@ -99,22 +103,21 @@ export const INITIAL_MEETINGS: Meeting[] = [
     description: 'Noche de pizzas caseras, juegos de mesa y muchas risas compartidas.',
     coverUrl: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=1000&q=80',
     dateTimeConfirmed: '15 de julio a las 20:00',
-    locationConfirmed: 'Casa de Tomás',
+    locationConfirmed: 'Casa de Kev',
     locationAddress: 'Calle Los Olivos 240',
     dateTimeOptions: [],
     locationOptions: [],
-    invitedMemberIds: ['m-mai', 'm-tomas', 'm-ana', 'm-carlos', 'm-lucia', 'm-martin'],
+    invitedMemberIds: ['m-mai', 'm-kev', 'm-lei', 'm-emi', 'm-gra'],
     rsvps: [
       { memberId: 'm-mai', status: 'voy' },
-      { memberId: 'm-tomas', status: 'voy' },
-      { memberId: 'm-ana', status: 'voy' },
-      { memberId: 'm-carlos', status: 'voy' },
-      { memberId: 'm-lucia', status: 'voy' },
-      { memberId: 'm-martin', status: 'voy' }
+      { memberId: 'm-kev', status: 'voy' },
+      { memberId: 'm-lei', status: 'voy' },
+      { memberId: 'm-emi', status: 'voy' },
+      { memberId: 'm-gra', status: 'voy' }
     ],
     tasks: [
-      { id: 't-201', title: 'Preparar masa para las pizzas', assignedMemberId: 'm-tomas', completed: true },
-      { id: 't-202', title: 'Llevar tablero de TEG y cartas', assignedMemberId: 'm-carlos', completed: true },
+      { id: 't-201', title: 'Preparar masa para las pizzas', assignedMemberId: 'm-kev', completed: true },
+      { id: 't-202', title: 'Llevar tablero de TEG y cartas', assignedMemberId: 'm-emi', completed: true },
       { id: 't-203', title: 'Llevar helado artesanal', assignedMemberId: 'm-mai', completed: true }
     ],
     memories: [
@@ -123,8 +126,8 @@ export const INITIAL_MEETINGS: Meeting[] = [
         meetingId: 'meet-rivera-2',
         photoUrl: 'https://images.unsplash.com/photo-1543807535-eceef0bc6599?auto=format&fit=crop&w=800&q=80',
         caption: 'La final épica de TEG',
-        anecdote: '¡La partida más divertida del año! Tomás no podía creer que Carlos le ganó en el último turno con una tirada de dados inolvidable.',
-        authorName: 'Ana',
+        anecdote: '¡La partida más divertida del año! Kev no podía creer que Emi le ganó en el último turno con una tirada de dados inolvidable.',
+        authorName: 'Gra',
         createdAt: '2026-07-16'
       },
       {
@@ -132,8 +135,8 @@ export const INITIAL_MEETINGS: Meeting[] = [
         meetingId: 'meet-rivera-2',
         photoUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
         caption: 'Pizzas listas al horno de barro',
-        anecdote: 'Las pizzas caseras de Tomás quedaron increíbles. Ya estamos pidiendo revancha culinaria para la próxima.',
-        authorName: 'Tomás',
+        anecdote: 'Las pizzas caseras de Kev quedaron increíbles. Ya estamos pidiendo revancha culinaria para la próxima.',
+        authorName: 'Kev',
         createdAt: '2026-07-16'
       },
       {
@@ -151,30 +154,28 @@ export const INITIAL_MEETINGS: Meeting[] = [
   {
     id: 'meet-rivera-3',
     familyId: 'rivera',
-    title: 'Cumpleaños de Carlos',
+    title: 'Cumpleaños de Gra',
     type: 'cumpleanos',
     status: 'confirmado',
-    description: 'Festejamos los 60 años de papá con toda la familia reunida y sorpresas.',
+    description: 'Festejamos el cumpleaños de Gra con toda la familia reunida y sorpresas.',
     coverUrl: 'https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?auto=format&fit=crop&w=1000&q=80',
     dateTimeConfirmed: '12 de octubre a las 19:30',
     locationConfirmed: 'Salón Las Lilas',
     locationAddress: 'Av. San Martín 1420',
     dateTimeOptions: [],
     locationOptions: [],
-    invitedMemberIds: ['m-mai', 'm-tomas', 'm-ana', 'm-carlos', 'm-lucia', 'm-martin', 'm-sofia'],
+    invitedMemberIds: ['m-mai', 'm-kev', 'm-lei', 'm-emi', 'm-gra'],
     rsvps: [
       { memberId: 'm-mai', status: 'voy' },
-      { memberId: 'm-tomas', status: 'voy' },
-      { memberId: 'm-ana', status: 'voy' },
-      { memberId: 'm-carlos', status: 'voy' },
-      { memberId: 'm-lucia', status: 'voy' },
-      { memberId: 'm-martin', status: 'voy' },
-      { memberId: 'm-sofia', status: 'voy' }
+      { memberId: 'm-kev', status: 'voy' },
+      { memberId: 'm-lei', status: 'voy' },
+      { memberId: 'm-emi', status: 'voy' },
+      { memberId: 'm-gra', status: 'voy' }
     ],
     tasks: [
       { id: 't-301', title: 'Encargar la torta especial de chocolate', assignedMemberId: 'm-mai', completed: true },
-      { id: 't-302', title: 'Decoración y guirnaldas', assignedMemberId: 'm-sofia', completed: false },
-      { id: 't-303', title: 'Armar playlist con sus canciones favoritas', assignedMemberId: 'm-tomas', completed: true }
+      { id: 't-302', title: 'Decoración y guirnaldas', assignedMemberId: 'm-lei', completed: false },
+      { id: 't-303', title: 'Armar playlist con sus canciones favoritas', assignedMemberId: 'm-kev', completed: true }
     ],
     memories: [],
     createdAt: '2026-08-10'

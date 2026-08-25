@@ -11,7 +11,9 @@ import {
   Sparkles, 
   Camera, 
   Clock, 
-  ChevronRight 
+  ChevronRight,
+  UserCheck,
+  Check
 } from 'lucide-react';
 import { ActiveScreen, Family, Meeting } from '../types';
 
@@ -21,6 +23,7 @@ interface HomeScreenProps {
   onNavigate: (screen: ActiveScreen) => void;
   onSelectMeeting: (meetingId: string) => void;
   onOpenFamiliesScreen: () => void;
+  onSwitchMember?: (memberId: string) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -29,7 +32,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigate,
   onSelectMeeting,
   onOpenFamiliesScreen,
+  onSwitchMember,
 }) => {
+  const currentMember = activeFamily.members.find((m) => m.isCurrentUser) || activeFamily.members[0];
+
   // Meetings specific to this active family
   const familyMeetings = meetings.filter((m) => m.familyId === activeFamily.id);
   
@@ -53,8 +59,61 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const pendingTasks = upcomingMeetings.flatMap((m) => m.tasks).filter((t) => !t.completed);
 
   return (
-    <div id="home-dashboard" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+    <div id="home-dashboard" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       
+      {/* Demo Persona Switcher Banner */}
+      {onSwitchMember && activeFamily.members.length > 1 && (
+        <div className="bg-gradient-to-r from-[#FF2EB5]/10 via-[#8B5CFF]/10 to-[#287BFF]/10 p-3.5 sm:p-4 rounded-2xl border border-[#FF2EB5]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div 
+              className="w-8 h-8 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
+              style={{ backgroundColor: currentMember.avatarColor || '#FF2EB5' }}
+            >
+              {currentMember.name.charAt(0)}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-[#15172A]">
+                  Modo Demo: Navegando como <strong className="text-[#FF2EB5]">{currentMember.name}</strong>
+                </span>
+                <span className="text-[11px] text-[#62677F]">
+                  ({currentMember.relation || (currentMember.role === 'admin' ? 'Admin' : 'Integrante')})
+                </span>
+              </div>
+              <p className="text-[11px] text-[#62677F]">
+                Toca cualquier integrante para probar votos, propuestas y tareas desde su perspectiva:
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            {activeFamily.members.map((member) => {
+              const isSelected = member.id === currentMember.id;
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => onSwitchMember(member.id)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#FF2EB5] text-white shadow-xs'
+                      : 'bg-white text-[#15172A] border border-gray-200 hover:border-[#FF2EB5]/50 hover:bg-[#FF2EB5]/5'
+                  }`}
+                >
+                  <span
+                    className="w-4 h-4 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
+                    style={{ backgroundColor: member.avatarColor || '#287BFF' }}
+                  >
+                    {member.name.charAt(0)}
+                  </span>
+                  <span>{member.name}</span>
+                  {isSelected && <Check className="w-3 h-3" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Welcome Banner / Family Header */}
       <section className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-white via-white to-[#F0F4FF] p-6 sm:p-7 rounded-3xl border border-[#287BFF]/15 shadow-xs">
         <div>
@@ -64,13 +123,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </span>
             <button
               onClick={onOpenFamiliesScreen}
-              className="text-xs text-[#287BFF] font-semibold hover:underline"
+              className="text-xs text-[#287BFF] font-semibold hover:underline cursor-pointer"
             >
               Cambiar familia
             </button>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#15172A] font-brand">
-            Hola, Mai 👋
+            Hola, {currentMember.name} 👋
           </h1>
           <p className="text-sm text-[#62677F] mt-0.5">
             Organizando momentos únicos en <strong className="text-[#15172A] font-semibold">{activeFamily.name}</strong>
@@ -82,7 +141,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <button
             id="home-create-meeting-cta"
             onClick={() => onNavigate('create_meeting')}
-            className="w-full sm:w-auto px-6 py-3 rounded-xl gradient-salcie-btn text-sm font-bold shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 hover:scale-102 active:scale-98 transition-all"
+            className="w-full sm:w-auto px-6 py-3 rounded-xl gradient-salcie-btn text-sm font-bold shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 hover:scale-102 active:scale-98 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Crear encuentro</span>

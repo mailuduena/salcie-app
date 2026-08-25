@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar, 
@@ -216,26 +216,32 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   const [imageError, setImageError] = useState('');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
 
-  // Step 2: Date & Time (Spanish formatting, collaborative mode)
+  // Step 2: Date & Time (Multi-option date voting setup)
   const todayDateStr = new Date().toISOString().split('T')[0];
   
-  // Initial date suggestion by organizer in collaborative mode (optional)
-  const [initialSuggestion, setInitialSuggestion] = useState<{
+  interface DateOptionItem {
+    id: string;
     day: string;
     month: string;
     year: string;
     date: string;
     time: string;
     text: string;
-  } | null>(null);
+    note?: string;
+  }
+
+  const [dateOptions, setDateOptions] = useState<DateOptionItem[]>([]);
+  const [editingDateId, setEditingDateId] = useState<string | null>(null);
+
   const [sugDay, setSugDay] = useState('');
   const [sugMonth, setSugMonth] = useState('');
   const [sugYear, setSugYear] = useState(CURRENT_YEAR.toString());
   const [sugDate, setSugDate] = useState('');
   const [sugTime, setSugTime] = useState('13:00');
+  const [sugNote, setSugNote] = useState('');
   const [sugError, setSugError] = useState('');
 
-  // Compute valid days in selected month for initial suggestion
+  // Compute valid days in selected month for date option selector
   const daysInSelectedMonthForSug = useMemo(() => {
     if (!sugMonth || !sugYear) return 31;
     const monthNum = parseInt(sugMonth, 10);
@@ -250,32 +256,41 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     });
   }, [daysInSelectedMonthForSug]);
 
-  // Step 3: Location (collaborative mode)
-  const [initialLocationSuggestion, setInitialLocationSuggestion] = useState<{
+  // Step 3: Location (Multi-option location voting setup)
+  interface LocationOptionItem {
+    id: string;
     name: string;
     address?: string;
     note?: string;
     mapsUrl?: string;
-  } | null>(null);
+  }
+
+  const [locationOptions, setLocationOptions] = useState<LocationOptionItem[]>([]);
+  const [editingLocId, setEditingLocId] = useState<string | null>(null);
   const [sugLocName, setSugLocName] = useState('');
   const [sugLocAddress, setSugLocAddress] = useState('');
   const [sugLocNote, setSugLocNote] = useState('');
   const [sugLocMapsUrl, setSugLocMapsUrl] = useState('');
   const [sugLocError, setSugLocError] = useState('');
 
-  // Identify Mai (organizer) vs other family members
-  const organizer = activeFamily.members.find(
-    (m) => m.isCurrentUser || m.id === 'm-mai' || m.name.toLowerCase() === 'mai'
-  ) || activeFamily.members[0];
+  // Identify organizer (active profile / current user) vs other family members
+  const organizer = useMemo(() => {
+    return activeFamily.members.find((m) => m.isCurrentUser) || activeFamily.members[0];
+  }, [activeFamily.members]);
 
-  const otherFamilyMembers = activeFamily.members.filter(
-    (m) => m.id !== organizer.id
-  );
+  const otherFamilyMembers = useMemo(() => {
+    return activeFamily.members.filter((m) => m.id !== organizer.id);
+  }, [activeFamily.members, organizer.id]);
 
   // Step 4: Guests (Only other family members are in selectable list)
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(() =>
     otherFamilyMembers.map((m) => m.id)
   );
+
+  // Keep selected guests synchronized when active family or organizer changes
+  useEffect(() => {
+    setSelectedMemberIds(otherFamilyMembers.map((m) => m.id));
+  }, [otherFamilyMembers]);
 
   // Step 5: Tasks & Organization
   const [tasks, setTasks] = useState<{ title: string; assignedMemberId?: string }[]>([
@@ -320,7 +335,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     }
   };
 
-  // Initial Date Suggestion Handlers
+  // Date Options Handlers (Step 2)
   const updateSugDateFromParts = (d: string, m: string, y: string) => {
     setSugError('');
     if (d && m && y) {
@@ -365,7 +380,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     setSugError('');
   };
 
-  const handleAddInitialSuggestion = () => {
+  const handleAddOrUpdateDateOption = () => {
     setSugError('');
     if (!sugDay || !sugMonth || !sugYear || !sugDate) {
       setSugError('Por favor selecciona día, mes y año.');
@@ -381,84 +396,192 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
     }
 
     const formatted = formatSpanishDateTime(sugDate, sugTime);
-    setInitialSuggestion({
-      day: sugDay,
-      month: sugMonth,
-      year: sugYear,
-      date: sugDate,
-      time: sugTime,
-      text: formatted,
+
+    // Duplicate check (ignoring current editing item)
+    const isDuplicate = dateOptions.some((opt) => {
+      if (editingDateId && opt.id === editingDateId) return false;
+      return opt.date === sugDate && opt.time === sugTime;
     });
-    setSugError('');
-    showToast('¡Tu sugerencia fue agregada con éxito!');
-  };
 
-  const handleEditInitialSuggestion = () => {
-    if (initialSuggestion) {
-      setSugDay(initialSuggestion.day);
-      setSugMonth(initialSuggestion.month);
-      setSugYear(initialSuggestion.year);
-      setSugDate(initialSuggestion.date);
-      setSugTime(initialSuggestion.time);
-      setInitialSuggestion(null);
-      setSugError('');
+    if (isDuplicate) {
+      setSugError('Esta opción de fecha y horario ya fue agregada.');
+      return;
     }
-  };
 
-  const handleRemoveInitialSuggestion = () => {
-    setInitialSuggestion(null);
+    if (editingDateId) {
+      setDateOptions((prev) =>
+        prev.map((opt) =>
+          opt.id === editingDateId
+            ? {
+                ...opt,
+                day: sugDay,
+                month: sugMonth,
+                year: sugYear,
+                date: sugDate,
+                time: sugTime,
+                text: formatted,
+                note: sugNote.trim() || undefined,
+              }
+            : opt
+        )
+      );
+      setEditingDateId(null);
+      showToast('¡Opción de fecha actualizada!');
+    } else {
+      const newOption: DateOptionItem = {
+        id: `dto-init-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        day: sugDay,
+        month: sugMonth,
+        year: sugYear,
+        date: sugDate,
+        time: sugTime,
+        text: formatted,
+        note: sugNote.trim() || undefined,
+      };
+      setDateOptions((prev) => [...prev, newOption]);
+      showToast('¡Opción de fecha agregada!');
+    }
+
+    // Reset input fields
     setSugDay('');
     setSugMonth('');
     setSugYear(CURRENT_YEAR.toString());
     setSugDate('');
     setSugTime('13:00');
+    setSugNote('');
     setSugError('');
-    showToast('Sugerencia eliminada.');
+    setErrors((prev) => {
+      const copy = { ...prev };
+      delete copy.dates;
+      return copy;
+    });
+  };
+
+  const handleEditDateOption = (opt: DateOptionItem) => {
+    setEditingDateId(opt.id);
+    setSugDay(opt.day);
+    setSugMonth(opt.month);
+    setSugYear(opt.year);
+    setSugDate(opt.date);
+    setSugTime(opt.time);
+    setSugNote(opt.note || '');
+    setSugError('');
+  };
+
+  const handleCancelEditDateOption = () => {
+    setEditingDateId(null);
+    setSugDay('');
+    setSugMonth('');
+    setSugYear(CURRENT_YEAR.toString());
+    setSugDate('');
+    setSugTime('13:00');
+    setSugNote('');
+    setSugError('');
+  };
+
+  const handleRemoveDateOption = (id: string) => {
+    setDateOptions((prev) => prev.filter((opt) => opt.id !== id));
+    if (editingDateId === id) {
+      handleCancelEditDateOption();
+    }
+    showToast('Opción de fecha eliminada.');
   };
 
   const isAddSugDisabled = !sugDay || !sugMonth || !sugYear || !sugDate || !sugTime || sugDate < todayDateStr;
 
-  // Initial Location Suggestion Handlers
-  const handleAddInitialLocationSuggestion = () => {
+  // Location Option Handlers (Multi-option voting)
+  const handleAddOrUpdateLocationOption = () => {
     setSugLocError('');
     if (!sugLocName.trim()) {
       setSugLocError('Por favor ingresa el nombre del lugar.');
       return;
     }
 
-    setInitialLocationSuggestion({
-      name: sugLocName.trim(),
-      address: sugLocAddress.trim() || undefined,
-      note: sugLocNote.trim() || undefined,
-      mapsUrl: sugLocMapsUrl.trim() || undefined,
+    const trimmedName = sugLocName.trim();
+    const trimmedAddress = sugLocAddress.trim() || undefined;
+    const trimmedNote = sugLocNote.trim() || undefined;
+    const trimmedMapsUrl = sugLocMapsUrl.trim() || undefined;
+
+    // Check duplicate (same name and address)
+    const isDuplicate = locationOptions.some((opt) => {
+      if (editingLocId && opt.id === editingLocId) return false;
+      return (
+        opt.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+        (opt.address || '').trim().toLowerCase() === (trimmedAddress || '').toLowerCase()
+      );
     });
-    setSugLocName('');
-    setSugLocAddress('');
-    setSugLocNote('');
-    setSugLocMapsUrl('');
-    setSugLocError('');
-    showToast('¡Tu sugerencia de lugar fue agregada con éxito!');
-  };
 
-  const handleEditInitialLocationSuggestion = () => {
-    if (initialLocationSuggestion) {
-      setSugLocName(initialLocationSuggestion.name);
-      setSugLocAddress(initialLocationSuggestion.address || '');
-      setSugLocNote(initialLocationSuggestion.note || '');
-      setSugLocMapsUrl(initialLocationSuggestion.mapsUrl || '');
-      setInitialLocationSuggestion(null);
-      setSugLocError('');
+    if (isDuplicate) {
+      setSugLocError('Esta alternativa de lugar (mismo nombre y dirección) ya fue agregada.');
+      return;
     }
-  };
 
-  const handleRemoveInitialLocationSuggestion = () => {
-    setInitialLocationSuggestion(null);
+    if (editingLocId) {
+      // Update existing option
+      setLocationOptions((prev) =>
+        prev.map((opt) =>
+          opt.id === editingLocId
+            ? {
+                ...opt,
+                name: trimmedName,
+                address: trimmedAddress,
+                note: trimmedNote,
+                mapsUrl: trimmedMapsUrl,
+              }
+            : opt
+        )
+      );
+      setEditingLocId(null);
+      showToast('¡Opción de lugar actualizada con éxito!');
+    } else {
+      // Add new option
+      const newOption: LocationOptionItem = {
+        id: `lo-init-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: trimmedName,
+        address: trimmedAddress,
+        note: trimmedNote,
+        mapsUrl: trimmedMapsUrl,
+      };
+      setLocationOptions((prev) => [...prev, newOption]);
+      showToast('¡Opción de lugar agregada con éxito!');
+    }
+
     setSugLocName('');
     setSugLocAddress('');
     setSugLocNote('');
     setSugLocMapsUrl('');
     setSugLocError('');
-    showToast('Sugerencia de lugar eliminada.');
+    setErrors((prev) => {
+      const copy = { ...prev };
+      delete copy.locations;
+      return copy;
+    });
+  };
+
+  const handleEditLocationOption = (opt: LocationOptionItem) => {
+    setEditingLocId(opt.id);
+    setSugLocName(opt.name);
+    setSugLocAddress(opt.address || '');
+    setSugLocNote(opt.note || '');
+    setSugLocMapsUrl(opt.mapsUrl || '');
+    setSugLocError('');
+  };
+
+  const handleCancelEditLocationOption = () => {
+    setEditingLocId(null);
+    setSugLocName('');
+    setSugLocAddress('');
+    setSugLocNote('');
+    setSugLocMapsUrl('');
+    setSugLocError('');
+  };
+
+  const handleRemoveLocationOption = (id: string) => {
+    setLocationOptions((prev) => prev.filter((opt) => opt.id !== id));
+    if (editingLocId === id) {
+      handleCancelEditLocationOption();
+    }
+    showToast('Opción de lugar eliminada.');
   };
 
   const validateStep = (step: number): boolean => {
@@ -466,6 +589,14 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
     if (step === 1) {
       if (!title.trim()) newErrors.title = 'Ingresa el nombre del encuentro.';
+    } else if (step === 2) {
+      if (dateOptions.length < 2) {
+        newErrors.dates = 'Agregá al menos dos alternativas de fecha y horario antes de continuar.';
+      }
+    } else if (step === 3) {
+      if (locationOptions.length < 2) {
+        newErrors.locations = 'Agregá al menos dos alternativas de lugar antes de continuar.';
+      }
     } else if (step === 4) {
       if (selectedMemberIds.length === 0) {
         newErrors.guests = 'Selecciona al menos un invitado.';
@@ -488,11 +619,10 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
   // Guest helpers
   const toggleMemberSelection = (id: string) => {
-    if (selectedMemberIds.includes(id)) {
-      setSelectedMemberIds(selectedMemberIds.filter((mId) => mId !== id));
-    } else {
-      setSelectedMemberIds([...selectedMemberIds, id]);
-    }
+    setSelectedMemberIds((prev) => {
+      const exists = prev.includes(id);
+      return exists ? prev.filter((mId) => mId !== id) : [...prev, id];
+    });
     setErrors((prev) => {
       const copy = { ...prev };
       delete copy.guests;
@@ -501,11 +631,13 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
   };
 
   const handleToggleAllGuests = () => {
-    if (selectedMemberIds.length === otherFamilyMembers.length) {
-      setSelectedMemberIds([]);
-    } else {
-      setSelectedMemberIds(otherFamilyMembers.map((m) => m.id));
-    }
+    setSelectedMemberIds((prev) => {
+      if (prev.length === otherFamilyMembers.length) {
+        return [];
+      } else {
+        return otherFamilyMembers.map((m) => m.id);
+      }
+    });
     setErrors((prev) => {
       const copy = { ...prev };
       delete copy.guests;
@@ -532,34 +664,27 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
   // Final Submit
   const handleFinalCreate = () => {
-    const finalStatus: MeetingStatus = 'esperando_sugerencias';
+    const finalStatus: MeetingStatus = 'votacion';
 
-    const formattedDateOptions: PollOption[] = initialSuggestion
-      ? [
-          {
-            id: `dto-init-${Date.now()}`,
-            text: initialSuggestion.text,
-            voterIds: [],
-            suggestedByMemberId: organizer.id,
-            suggestedByName: organizer.name,
-          }
-        ]
-      : [];
+    const formattedDateOptions: PollOption[] = dateOptions.map((opt, idx) => ({
+      id: opt.id || `dto-init-${Date.now()}-${idx}`,
+      text: opt.text,
+      note: opt.note,
+      voterIds: [],
+      suggestedByMemberId: organizer.id,
+      suggestedByName: organizer.name,
+    }));
 
-    const formattedLocationOptions: PollOption[] = initialLocationSuggestion
-      ? [
-          {
-            id: `lo-init-${Date.now()}`,
-            text: initialLocationSuggestion.name,
-            address: initialLocationSuggestion.address,
-            note: initialLocationSuggestion.note,
-            mapsUrl: initialLocationSuggestion.mapsUrl,
-            voterIds: [],
-            suggestedByMemberId: organizer.id,
-            suggestedByName: organizer.name,
-          }
-        ]
-      : [];
+    const formattedLocationOptions: PollOption[] = locationOptions.map((opt, idx) => ({
+      id: opt.id || `lo-init-${Date.now()}-${idx}`,
+      text: opt.name,
+      address: opt.address,
+      note: opt.note,
+      mapsUrl: opt.mapsUrl,
+      voterIds: [],
+      suggestedByMemberId: organizer.id,
+      suggestedByName: organizer.name,
+    }));
 
     const formattedTasks: MeetingTask[] = tasks.map((t, idx) => ({
       id: `t-new-${Date.now()}-${idx}`,
@@ -581,7 +706,7 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
       locationAddress: undefined,
       dateTimeOptions: formattedDateOptions,
       locationOptions: formattedLocationOptions,
-      invitedMemberIds: selectedMemberIds,
+      invitedMemberIds: [organizer.id, ...selectedMemberIds],
       rsvps: [
         { memberId: organizer.id, status: 'voy' },
         ...selectedMemberIds.map((mId) => ({
@@ -888,10 +1013,10 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                       A definir en familia
                     </span>
                     <h3 className="text-sm sm:text-base font-bold text-[#15172A]">
-                      Sugerir fechas en familia
+                      Votación de fechas
                     </h3>
                     <p className="text-xs sm:text-sm text-[#62677F] leading-relaxed">
-                      Cada integrante podrá sugerir fechas. Cuando todos terminen, la familia votará y ganará la opción con más votos.
+                      Agregá las alternativas de fecha y horario en las que podría realizarse el encuentro. Después de crearlo, la familia votará para elegir la opción preferida.
                     </p>
                   </div>
                 </div>
@@ -899,159 +1024,227 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-gray-200">
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#8B5CFF]/15 text-[#8B5CFF] font-bold text-xs flex items-center justify-center shrink-0">1</span>
-                    <span className="font-medium">Creás el encuentro</span>
+                    <span className="font-medium">Cargás al menos 2 opciones</span>
                   </div>
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#287BFF]/15 text-[#287BFF] font-bold text-xs flex items-center justify-center shrink-0">2</span>
-                    <span className="font-medium">La familia sugiere fechas</span>
+                    <span className="font-medium">La familia vota su preferencia</span>
                   </div>
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5] font-bold text-xs flex items-center justify-center shrink-0">3</span>
-                    <span className="font-medium">Votan y gana la más elegida</span>
+                    <span className="font-medium">Gana la opción más votada</span>
                   </div>
                 </div>
               </div>
 
-              {/* Section: Tu primera sugerencia */}
+              {/* Section: Opciones de fecha para votar */}
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm sm:text-base font-bold text-[#15172A] flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-[#287BFF]" />
-                      Tu primera sugerencia
+                      Opciones de fecha para votar
                     </h3>
-                    <span className="text-[11px] font-semibold text-[#62677F] bg-gray-100 px-2 py-0.5 rounded-md">
-                      Opcional
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                      dateOptions.length >= 2
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {dateOptions.length} de 2 mínimas
                     </span>
                   </div>
                   <p className="text-xs text-[#62677F] mt-1 leading-relaxed">
-                    Podés proponer una fecha ahora. Los demás integrantes podrán sumar otras después de creado el encuentro.
+                    Agregá al menos dos alternativas para que la familia pueda votar después de crear el encuentro.
                   </p>
                 </div>
 
-                {initialSuggestion ? (
-                  /* Tarjeta con la sugerencia agregada */
-                  <div className="bg-[#F7F8FF] p-4 rounded-xl border border-[#287BFF]/30 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#287BFF]/10 text-[#287BFF] flex items-center justify-center shrink-0">
-                        <Calendar className="w-5 h-5 text-[#287BFF]" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate capitalize">
-                          {initialSuggestion.text}
-                        </p>
-                        <p className="text-[11px] font-semibold text-[#287BFF] flex items-center gap-1 mt-0.5">
-                          <span>Sugerida por {organizer.name}</span>
-                        </p>
-                      </div>
-                    </div>
+                {/* Lista de tarjetas con las opciones agregadas */}
+                {dateOptions.length > 0 && (
+                  <div className="space-y-2.5 pt-1">
+                    <p className="text-[11px] font-bold text-[#62677F] uppercase tracking-wider">
+                      Opciones cargadas ({dateOptions.length})
+                    </p>
+                    <div className="space-y-2">
+                      {dateOptions.map((opt, idx) => (
+                        <div
+                          key={opt.id}
+                          className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                            editingDateId === opt.id
+                              ? 'bg-[#287BFF]/5 border-[#287BFF] ring-2 ring-[#287BFF]/20'
+                              : 'bg-[#F7F8FF] border-[#287BFF]/25'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-[#287BFF]/10 text-[#287BFF] flex items-center justify-center font-bold text-xs shrink-0">
+                              #{idx + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate capitalize">
+                                {opt.text}
+                              </p>
+                              {opt.note && (
+                                <p className="text-[11px] text-[#62677F] truncate">
+                                  Nota: {opt.note}
+                                </p>
+                              )}
+                              <p className="text-[11px] font-semibold text-[#287BFF] mt-0.5">
+                                Propuesta por {organizer.name}
+                              </p>
+                            </div>
+                          </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={handleEditInitialSuggestion}
-                        id="edit-organizer-sug-btn"
-                        className="p-2 rounded-lg text-[#62677F] hover:text-[#287BFF] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
-                        title="Editar sugerencia"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRemoveInitialSuggestion}
-                        id="remove-organizer-sug-btn"
-                        className="p-2 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
-                        title="Eliminar sugerencia"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditDateOption(opt)}
+                              className="p-1.5 rounded-lg text-[#62677F] hover:text-[#287BFF] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                              title="Editar opción"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDateOption(opt.id)}
+                              className="p-1.5 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                              title="Eliminar opción"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ) : (
-                  /* Formulario de selectores */
-                  <div className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Fecha propuesta
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        <select
-                          id="sug-day-select"
-                          value={sugDay}
-                          onChange={(e) => handleSugDaySelect(e.target.value)}
-                          className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                        >
-                          <option value="">Día</option>
-                          {dayOptionsForSug.map((d) => (
-                            <option key={d} value={d}>
-                              {parseInt(d, 10)}
-                            </option>
-                          ))}
-                        </select>
+                )}
 
-                        <select
-                          id="sug-month-select"
-                          value={sugMonth}
-                          onChange={(e) => handleSugMonthSelect(e.target.value)}
-                          className="w-full px-2 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                        >
-                          <option value="">Mes</option>
-                          {MONTHS_SPANISH.map((m) => (
-                            <option key={m.value} value={m.value}>
-                              {m.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          id="sug-year-select"
-                          value={sugYear}
-                          onChange={(e) => handleSugYearSelect(e.target.value)}
-                          className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
-                        >
-                          {YEAR_OPTIONS.map((y) => (
-                            <option key={y} value={y.toString()}>
-                              {y}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="sug-time-picker" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Horario
-                      </label>
-                      <input
-                        id="sug-time-picker"
-                        type="time"
-                        value={sugTime}
-                        onChange={(e) => handleSugTimeChange(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
-                      />
-                    </div>
-
-                    {sugError && (
-                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
-                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                        <span>{sugError}</span>
-                      </div>
+                {/* Formulario para agregar / editar opción */}
+                <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#15172A]">
+                      {editingDateId ? '✏️ Editando opción de fecha' : '➕ Agregar una alternativa de fecha'}
+                    </p>
+                    {editingDateId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditDateOption}
+                        className="text-xs text-[#62677F] hover:text-[#15172A] font-semibold underline cursor-pointer"
+                      >
+                        Cancelar edición
+                      </button>
                     )}
+                  </div>
 
-                    <button
-                      type="button"
-                      id="add-organizer-sug-btn"
-                      onClick={handleAddInitialSuggestion}
-                      disabled={isAddSugDisabled}
-                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                        isAddSugDisabled
-                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                          : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white shadow-xs cursor-pointer'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Agregar mi sugerencia</span>
-                    </button>
+                  <div>
+                    <label className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Fecha propuesta
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        id="sug-day-select"
+                        value={sugDay}
+                        onChange={(e) => handleSugDaySelect(e.target.value)}
+                        className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                      >
+                        <option value="">Día</option>
+                        {dayOptionsForSug.map((d) => (
+                          <option key={d} value={d}>
+                            {parseInt(d, 10)}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        id="sug-month-select"
+                        value={sugMonth}
+                        onChange={(e) => handleSugMonthSelect(e.target.value)}
+                        className="w-full px-2 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                      >
+                        <option value="">Mes</option>
+                        {MONTHS_SPANISH.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        id="sug-year-select"
+                        value={sugYear}
+                        onChange={(e) => handleSugYearSelect(e.target.value)}
+                        className="w-full px-2.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all cursor-pointer"
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={y.toString()}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="sug-time-picker" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Horario
+                    </label>
+                    <input
+                      id="sug-time-picker"
+                      type="time"
+                      value={sugTime}
+                      onChange={(e) => handleSugTimeChange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="sug-note-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Nota o comentario <span className="font-normal text-[#62677F]">(opcional)</span>
+                    </label>
+                    <input
+                      id="sug-note-input"
+                      type="text"
+                      placeholder="Ej: Al mediodía, después de almorzar, etc."
+                      value={sugNote}
+                      onChange={(e) => setSugNote(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#287BFF] focus:ring-1 focus:ring-[#287BFF] transition-all"
+                    />
+                  </div>
+
+                  {sugError && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{sugError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    id="add-date-option-btn"
+                    onClick={handleAddOrUpdateDateOption}
+                    disabled={isAddSugDisabled}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                      isAddSugDisabled
+                        ? 'bg-gray-200 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white shadow-xs cursor-pointer'
+                    }`}
+                  >
+                    {editingDateId ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Guardar cambios de fecha</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Agregar opción de fecha</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {errors.dates && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>{errors.dates}</span>
                   </div>
                 )}
               </div>
@@ -1065,10 +1258,10 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
             <div>
               <span className="text-xs font-bold text-[#FF2EB5] uppercase tracking-wider">Paso 3 de 6</span>
               <h2 className="text-xl sm:text-2xl font-bold text-[#15172A] font-brand">Lugar del encuentro</h2>
-              <p className="text-xs sm:text-sm text-[#62677F]">Los lugares se coordinan y votan entre todos los integrantes de la familia.</p>
+              <p className="text-xs sm:text-sm text-[#62677F]">Cargá las opciones de lugar para que la familia pueda votar su favorito.</p>
             </div>
 
-            {/* Collaborative Location Single Flow */}
+            {/* Collaborative Location Multi-Option Flow */}
             <div className="space-y-4">
               {/* Informative Explanation Panel */}
               <div className="bg-[#F7F8FF] p-5 sm:p-6 rounded-2xl border border-[#FF2EB5]/30 space-y-4">
@@ -1081,10 +1274,10 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                       A definir en familia
                     </span>
                     <h3 className="text-sm sm:text-base font-bold text-[#15172A]">
-                      Sugerir lugares en familia
+                      Votación de lugar
                     </h3>
                     <p className="text-xs sm:text-sm text-[#62677F] leading-relaxed">
-                      Cada integrante podrá sugerir lugares. Cuando todos terminen, la familia votará y ganará la opción con más votos.
+                      Agregá las alternativas de lugar donde podría realizarse el encuentro. Después de crearlo, la familia votará para elegir la opción preferida.
                     </p>
                   </div>
                 </div>
@@ -1092,178 +1285,227 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-gray-200">
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5] font-bold text-xs flex items-center justify-center shrink-0">1</span>
-                    <span className="font-medium">Creás el encuentro</span>
+                    <span className="font-medium">Cargás al menos 2 lugares</span>
                   </div>
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#8B5CFF]/15 text-[#8B5CFF] font-bold text-xs flex items-center justify-center shrink-0">2</span>
-                    <span className="font-medium">La familia sugiere lugares</span>
+                    <span className="font-medium">La familia vota su preferencia</span>
                   </div>
                   <div className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-2.5 text-xs text-[#15172A]">
                     <span className="w-6 h-6 rounded-full bg-[#287BFF]/15 text-[#287BFF] font-bold text-xs flex items-center justify-center shrink-0">3</span>
-                    <span className="font-medium">Votan y gana el más elegido</span>
+                    <span className="font-medium">Gana el lugar más votado</span>
                   </div>
                 </div>
               </div>
 
-              {/* Section: Tu primera sugerencia */}
+              {/* Section: Opciones de lugar para votar */}
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm sm:text-base font-bold text-[#15172A] flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-[#FF2EB5]" />
-                      Tu primera sugerencia
+                      Opciones de lugar para votar
                     </h3>
-                    <span className="text-[11px] font-semibold text-[#62677F] bg-gray-100 px-2 py-0.5 rounded-md">
-                      Opcional
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                      locationOptions.length >= 2
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {locationOptions.length} de 2 mínimas
                     </span>
                   </div>
                   <p className="text-xs text-[#62677F] mt-1 leading-relaxed">
-                    Podés proponer un lugar ahora. Los demás integrantes podrán sumar otros después de creado el encuentro.
+                    Agregá al menos dos alternativas para que la familia pueda votar después de crear el encuentro.
                   </p>
                 </div>
 
-                {initialLocationSuggestion ? (
-                  /* Tarjeta con la sugerencia agregada */
-                  <div className="bg-[#F7F8FF] p-4 rounded-xl border border-[#FF2EB5]/30 flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#FF2EB5]/10 text-[#FF2EB5] flex items-center justify-center shrink-0 mt-0.5">
-                        <MapPin className="w-5 h-5 text-[#FF2EB5]" />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate">
-                          {initialLocationSuggestion.name}
-                        </p>
-                        {initialLocationSuggestion.address && (
-                          <p className="text-xs text-[#62677F] flex items-center gap-1">
-                            <span className="truncate">📍 {initialLocationSuggestion.address}</span>
-                          </p>
-                        )}
-                        {initialLocationSuggestion.note && (
-                          <p className="text-xs text-[#62677F] italic">
-                            💬 "{initialLocationSuggestion.note}"
-                          </p>
-                        )}
-                        {initialLocationSuggestion.mapsUrl && (
-                          <a
-                            href={initialLocationSuggestion.mapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#287BFF] hover:underline"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Ver en Google Maps</span>
-                          </a>
-                        )}
-                        <p className="text-[11px] font-semibold text-[#FF2EB5] flex items-center gap-1 pt-0.5">
-                          <span>Sugerido por {organizer.name}</span>
-                        </p>
-                      </div>
-                    </div>
+                {/* Lista de tarjetas con los lugares agregados */}
+                {locationOptions.length > 0 && (
+                  <div className="space-y-2.5 pt-1">
+                    <p className="text-[11px] font-bold text-[#62677F] uppercase tracking-wider">
+                      Lugares cargados ({locationOptions.length})
+                    </p>
+                    <div className="space-y-2">
+                      {locationOptions.map((opt, idx) => (
+                        <div
+                          key={opt.id}
+                          className={`p-3.5 rounded-xl border transition-all flex items-start justify-between gap-3 ${
+                            editingLocId === opt.id
+                              ? 'bg-[#FF2EB5]/5 border-[#FF2EB5] ring-2 ring-[#FF2EB5]/20'
+                              : 'bg-[#F7F8FF] border-[#FF2EB5]/25'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-[#FF2EB5]/10 text-[#FF2EB5] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                              #{idx + 1}
+                            </div>
+                            <div className="min-w-0 space-y-0.5">
+                              <p className="text-xs sm:text-sm font-bold text-[#15172A] truncate">
+                                {opt.name}
+                              </p>
+                              {opt.address && (
+                                <p className="text-xs text-[#62677F] truncate">
+                                  📍 {opt.address}
+                                </p>
+                              )}
+                              {opt.note && (
+                                <p className="text-[11px] text-[#62677F] italic truncate">
+                                  💬 "{opt.note}"
+                                </p>
+                              )}
+                              {opt.mapsUrl && (
+                                <a
+                                  href={opt.mapsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#287BFF] hover:underline"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Ver en Maps</span>
+                                </a>
+                              )}
+                              <p className="text-[11px] font-semibold text-[#FF2EB5] mt-0.5">
+                                Propuesto por {organizer.name}
+                              </p>
+                            </div>
+                          </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={handleEditInitialLocationSuggestion}
-                        id="edit-organizer-loc-sug-btn"
-                        className="p-2 rounded-lg text-[#62677F] hover:text-[#FF2EB5] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
-                        title="Editar sugerencia de lugar"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRemoveInitialLocationSuggestion}
-                        id="remove-organizer-loc-sug-btn"
-                        className="p-2 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
-                        title="Eliminar sugerencia de lugar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditLocationOption(opt)}
+                              className="p-1.5 rounded-lg text-[#62677F] hover:text-[#FF2EB5] hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                              title="Editar opción de lugar"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLocationOption(opt.id)}
+                              className="p-1.5 rounded-lg text-[#62677F] hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer"
+                              title="Eliminar opción de lugar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ) : (
-                  /* Formulario de campos para el lugar */
-                  <div className="space-y-3 pt-1">
-                    <div>
-                      <label htmlFor="sug-loc-name-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Nombre del lugar <span className="text-[#FF2EB5]">*</span>
-                      </label>
-                      <input
-                        id="sug-loc-name-input"
-                        type="text"
-                        value={sugLocName}
-                        onChange={(e) => {
-                          setSugLocName(e.target.value);
-                          setSugLocError('');
-                        }}
-                        placeholder="Ej. Casa de Ana, Restaurante La Estancia, Club..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
-                      />
-                    </div>
+                )}
 
-                    <div>
-                      <label htmlFor="sug-loc-address-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Dirección o ubicación <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
-                      </label>
-                      <input
-                        id="sug-loc-address-input"
-                        type="text"
-                        value={sugLocAddress}
-                        onChange={(e) => setSugLocAddress(e.target.value)}
-                        placeholder="Ej. Calle Los Olivos 240, Barrio San Carlos..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="sug-loc-note-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Nota o detalle <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
-                      </label>
-                      <input
-                        id="sug-loc-note-input"
-                        type="text"
-                        value={sugLocNote}
-                        onChange={(e) => setSugLocNote(e.target.value)}
-                        placeholder="Ej. Tiene mesas afuera, hay que reservar..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="sug-loc-maps-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
-                        Enlace de Google Maps <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
-                      </label>
-                      <input
-                        id="sug-loc-maps-input"
-                        type="url"
-                        value={sugLocMapsUrl}
-                        onChange={(e) => setSugLocMapsUrl(e.target.value)}
-                        placeholder="Ej. https://maps.app.goo.gl/..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
-                      />
-                    </div>
-
-                    {sugLocError && (
-                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
-                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                        <span>{sugLocError}</span>
-                      </div>
+                {/* Formulario para agregar / editar lugar */}
+                <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#15172A]">
+                      {editingLocId ? '✏️ Editando opción de lugar' : '➕ Agregar una alternativa de lugar'}
+                    </p>
+                    {editingLocId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditLocationOption}
+                        className="text-xs text-[#62677F] hover:text-[#15172A] font-semibold underline cursor-pointer"
+                      >
+                        Cancelar edición
+                      </button>
                     )}
+                  </div>
 
-                    <button
-                      type="button"
-                      id="add-organizer-loc-sug-btn"
-                      onClick={handleAddInitialLocationSuggestion}
-                      disabled={!sugLocName.trim()}
-                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                        !sugLocName.trim()
-                          ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                          : 'bg-[#FF2EB5] hover:bg-[#e0209e] text-white shadow-xs cursor-pointer'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Agregar mi sugerencia</span>
-                    </button>
+                  <div>
+                    <label htmlFor="sug-loc-name-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Nombre del lugar <span className="text-[#FF2EB5]">*</span>
+                    </label>
+                    <input
+                      id="sug-loc-name-input"
+                      type="text"
+                      value={sugLocName}
+                      onChange={(e) => {
+                        setSugLocName(e.target.value);
+                        setSugLocError('');
+                      }}
+                      placeholder="Ej. Casa de Gra, Restaurante La Estancia, Club..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="sug-loc-address-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Dirección o ubicación <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                    </label>
+                    <input
+                      id="sug-loc-address-input"
+                      type="text"
+                      value={sugLocAddress}
+                      onChange={(e) => setSugLocAddress(e.target.value)}
+                      placeholder="Ej. Calle Los Olivos 240, Barrio San Carlos..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="sug-loc-note-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Nota o detalle <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                    </label>
+                    <input
+                      id="sug-loc-note-input"
+                      type="text"
+                      value={sugLocNote}
+                      onChange={(e) => setSugLocNote(e.target.value)}
+                      placeholder="Ej. Tiene mesas afuera, hay que reservar..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="sug-loc-maps-input" className="block text-xs font-bold text-[#15172A] mb-1.5">
+                      Enlace de Google Maps <span className="text-[11px] font-normal text-[#62677F]">(Opcional)</span>
+                    </label>
+                    <input
+                      id="sug-loc-maps-input"
+                      type="url"
+                      value={sugLocMapsUrl}
+                      onChange={(e) => setSugLocMapsUrl(e.target.value)}
+                      placeholder="Ej. https://maps.app.goo.gl/..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-medium text-[#15172A] bg-white focus:outline-none focus:border-[#FF2EB5] focus:ring-1 focus:ring-[#FF2EB5] transition-all"
+                    />
+                  </div>
+
+                  {sugLocError && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{sugLocError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    id="add-location-option-btn"
+                    onClick={handleAddOrUpdateLocationOption}
+                    disabled={!sugLocName.trim()}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                      !sugLocName.trim()
+                        ? 'bg-gray-200 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        : 'bg-[#FF2EB5] hover:bg-[#e0209e] text-white shadow-xs cursor-pointer'
+                    }`}
+                  >
+                    {editingLocId ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Guardar cambios de lugar</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Agregar opción de lugar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {errors.locations && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>{errors.locations}</span>
                   </div>
                 )}
               </div>
@@ -1286,14 +1528,14 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                   type="button"
                   id="toggle-all-guests-btn"
                   onClick={handleToggleAllGuests}
-                  className="text-xs font-bold text-[#287BFF] hover:underline"
+                  className="text-xs font-bold text-[#287BFF] hover:underline cursor-pointer transition-colors"
                 >
                   {selectedMemberIds.length === otherFamilyMembers.length ? 'Deseleccionar todos' : 'Invitar a todos'}
                 </button>
               )}
             </div>
 
-            {/* Sección destacada de la organizadora (Mai) */}
+            {/* Sección destacada de la persona organizadora */}
             <div className="bg-[#FFF5FA] border border-[#FF2EB5]/30 p-4 rounded-2xl">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -1307,11 +1549,11 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-bold text-[#15172A]">{organizer.name}</p>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FF2EB5]/15 text-[#FF2EB5]">
-                        Tú
+                        {organizer.isCurrentUser ? 'Tú' : (organizer.relation || 'Organizador')}
                       </span>
                     </div>
                     <p className="text-xs text-[#FF2EB5] font-semibold flex items-center gap-1 mt-0.5">
-                      Organizadora · Incluida automáticamente
+                      {organizer.role === 'admin' ? 'Organizadora / Admin' : 'Organizador(a)'} · Incluido(a) automáticamente
                     </p>
                   </div>
                 </div>
@@ -1334,12 +1576,13 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                   return (
                     <button
                       key={member.id}
+                      id={`guest-card-${member.id}`}
                       type="button"
                       onClick={() => toggleMemberSelection(member.id)}
-                      className={`p-3.5 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all ${
+                      className={`p-3.5 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all cursor-pointer ${
                         isSelected
-                          ? 'border-[#287BFF] bg-[#287BFF]/8 ring-1 ring-[#287BFF]'
-                          : 'border-gray-200 hover:border-gray-300 opacity-60'
+                          ? 'border-[#287BFF] bg-[#287BFF]/10 ring-2 ring-[#287BFF] shadow-xs'
+                          : 'border-gray-200 bg-white hover:border-[#287BFF]/40 opacity-75 hover:opacity-100'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -1357,8 +1600,8 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
                         </div>
                       </div>
 
-                      <div className={`w-5 h-5 rounded-md flex items-center justify-center ${
-                        isSelected ? 'bg-[#287BFF] text-white' : 'border border-gray-300'
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors ${
+                        isSelected ? 'bg-[#287BFF] text-white' : 'border border-gray-300 bg-white'
                       }`}>
                         {isSelected && <Check className="w-3.5 h-3.5" />}
                       </div>
@@ -1496,47 +1739,60 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
 
               {/* Date & Location Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                  <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center gap-1 mb-1">
-                    <Clock className="w-3 h-3 text-[#287BFF]" /> Fecha y hora
+                <div className="bg-white p-3.5 rounded-xl border border-gray-100 space-y-1.5">
+                  <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-[#287BFF]" /> Votación de fecha
+                    </span>
+                    <span className="text-[#287BFF] font-bold">
+                      {dateOptions.length} {dateOptions.length === 1 ? 'opción' : 'opciones'}
+                    </span>
                   </p>
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-[#15172A]">Fecha a definir en familia</p>
-                    <p className="text-xs text-[#62677F]">
-                      {initialSuggestion ? (
-                        <>
-                          Primera sugerencia:{' '}
-                          <span className="font-semibold text-[#15172A] capitalize">
-                            {initialSuggestion.text}
-                          </span>{' '}
-                          · por {organizer.name}
-                        </>
-                      ) : (
-                        'Todavía no hay fechas sugeridas.'
-                      )}
-                    </p>
+                  <div className="space-y-1">
+                    {dateOptions.map((opt, i) => (
+                      <div key={opt.id} className="flex items-start gap-1.5 text-xs text-[#15172A]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#287BFF] mt-1.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold capitalize">{opt.text}</span>
+                          {opt.note && (
+                            <span className="text-[#62677F] text-[11px] block">
+                              Nota: {opt.note}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="bg-white p-3 rounded-xl border border-gray-100">
-                  <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center gap-1 mb-1">
-                    <MapPin className="w-3 h-3 text-[#FF2EB5]" /> Lugar
+                <div className="bg-white p-3.5 rounded-xl border border-gray-100 space-y-1.5">
+                  <p className="font-bold text-[#62677F] uppercase text-[10px] flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-[#FF2EB5]" /> Votación de lugar
+                    </span>
+                    <span className="text-[#FF2EB5] font-bold">
+                      {locationOptions.length} {locationOptions.length === 1 ? 'opción' : 'opciones'}
+                    </span>
                   </p>
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-[#15172A]">Lugar a definir en familia</p>
-                    <p className="text-xs text-[#62677F]">
-                      {initialLocationSuggestion ? (
-                        <>
-                          Primera sugerencia:{' '}
-                          <span className="font-semibold text-[#15172A]">
-                            {initialLocationSuggestion.name}
-                          </span>{' '}
-                          · por {organizer.name}
-                        </>
-                      ) : (
-                        'Todavía no hay lugares sugeridos.'
-                      )}
-                    </p>
+                  <div className="space-y-1">
+                    {locationOptions.map((opt) => (
+                      <div key={opt.id} className="flex items-start gap-1.5 text-xs text-[#15172A]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FF2EB5] mt-1.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold">{opt.name}</span>
+                          {opt.address && (
+                            <span className="text-[#62677F] text-[11px] block">
+                              📍 {opt.address}
+                            </span>
+                          )}
+                          {opt.note && (
+                            <span className="text-[#62677F] text-[11px] block italic">
+                              💬 "{opt.note}"
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1609,7 +1865,16 @@ export const CreateMeetingScreen: React.FC<CreateMeetingScreenProps> = ({
               id="wizard-next-step-btn"
               type="button"
               onClick={handleNextStep}
-              className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors shadow-sm bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer"
+              disabled={
+                (currentStep === 2 && dateOptions.length < 2) ||
+                (currentStep === 3 && locationOptions.length < 2)
+              }
+              className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors shadow-sm ${
+                (currentStep === 2 && dateOptions.length < 2) ||
+                (currentStep === 3 && locationOptions.length < 2)
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#287BFF] hover:bg-[#1a6beb] text-white cursor-pointer'
+              }`}
             >
               <span>Siguiente</span>
               <ArrowRight className="w-4 h-4" />
